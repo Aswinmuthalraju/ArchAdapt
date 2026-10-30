@@ -13,24 +13,24 @@ interface AppearancePanelProps {
 
 export default function AppearancePanel({ appearance, onChange, onClose }: AppearancePanelProps) {
   return (
-    <div className="absolute top-16 right-6 z-30 w-80 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md border border-stone-300 dark:border-stone-700 shadow-2xl p-5 text-stone-900 dark:text-stone-100 space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+    <div className="absolute right-5 top-[4.75rem] z-30 w-80 animate-rise border border-gold-400/40 bg-plum-850/95 p-5 text-stone-100 shadow-lift backdrop-blur-md space-y-5">
       {/* Panel Header */}
-      <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 pb-3">
-        <div className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-wider text-stone-800 dark:text-stone-200">
-          <Palette className="h-4 w-4 text-terracotta-500" />
-          <span>House Appearance</span>
+      <div className="flex items-center justify-between border-b border-plum-700 pb-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gold-200">
+          <Palette className="h-4 w-4 text-gold-300" />
+          <span>House appearance</span>
         </div>
         <button
           onClick={onClose}
-          className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
+          className="p-1 text-stone-400 hover:text-gold-200 transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Wall Plaster Color */}
+      {/* Wall colour */}
       <div className="space-y-2">
-        <label className="font-mono text-[10px] uppercase font-bold text-stone-500 tracking-wider">Wall Plaster Color</label>
+        <label className="text-sm font-medium text-stone-300">Wall colour</label>
         <div className="flex items-center gap-2">
           {WALL_COLOR_PRESETS.map((preset) => {
             const isSelected = appearance.wallColor.toLowerCase() === preset.hex.toLowerCase();
@@ -39,7 +39,7 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
                 key={preset.name}
                 onClick={() => onChange({ ...appearance, wallColor: preset.hex })}
                 className={`h-7 w-7 rounded-full border transition-all ${
-                  isSelected ? 'ring-2 ring-terracotta-500 scale-110 border-stone-900' : 'border-stone-300 hover:scale-105'
+                  isSelected ? 'ring-2 ring-gold-400 ring-offset-2 ring-offset-plum-850 scale-110 border-transparent' : 'border-plum-600 hover:scale-105'
                 }`}
                 style={{ backgroundColor: preset.hex }}
                 title={preset.name}
@@ -56,9 +56,9 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
         </div>
       </div>
 
-      {/* Roof Tile Color */}
+      {/* Roof colour */}
       <div className="space-y-2">
-        <label className="font-mono text-[10px] uppercase font-bold text-stone-500 tracking-wider">Roof Tile Color</label>
+        <label className="text-sm font-medium text-stone-300">Roof colour</label>
         <div className="flex items-center gap-2">
           {ROOF_COLOR_PRESETS.map((preset) => {
             const isSelected = appearance.roofColor.toLowerCase() === preset.hex.toLowerCase();
@@ -67,7 +67,7 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
                 key={preset.name}
                 onClick={() => onChange({ ...appearance, roofColor: preset.hex })}
                 className={`h-7 w-7 rounded-full border transition-all ${
-                  isSelected ? 'ring-2 ring-terracotta-500 scale-110 border-stone-900' : 'border-stone-300 hover:scale-105'
+                  isSelected ? 'ring-2 ring-gold-400 ring-offset-2 ring-offset-plum-850 scale-110 border-transparent' : 'border-plum-600 hover:scale-105'
                 }`}
                 style={{ backgroundColor: preset.hex }}
                 title={preset.name}
@@ -86,7 +86,7 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
 
       {/* Window Frame Color */}
       <div className="space-y-2">
-        <label className="font-mono text-[10px] uppercase font-bold text-stone-500 tracking-wider">Window & Door Frame</label>
+        <label className="text-sm font-medium text-stone-300">Window and door frames</label>
         <div className="flex items-center gap-2">
           {FRAME_COLOR_PRESETS.map((preset) => {
             const isSelected = appearance.frameColor.toLowerCase() === preset.hex.toLowerCase();
@@ -95,7 +95,7 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
                 key={preset.name}
                 onClick={() => onChange({ ...appearance, frameColor: preset.hex })}
                 className={`h-7 w-7 rounded-full border transition-all ${
-                  isSelected ? 'ring-2 ring-terracotta-500 scale-110 border-stone-900' : 'border-stone-300 hover:scale-105'
+                  isSelected ? 'ring-2 ring-gold-400 ring-offset-2 ring-offset-plum-850 scale-110 border-transparent' : 'border-plum-600 hover:scale-105'
                 }`}
                 style={{ backgroundColor: preset.hex }}
                 title={preset.name}
@@ -107,7 +107,7 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
 
       {/* Accent Material */}
       <div className="space-y-2">
-        <label className="font-mono text-[10px] uppercase font-bold text-stone-500 tracking-wider">Facade Accent Material</label>
+        <label className="text-sm font-medium text-stone-300">Facade accent</label>
         <div className="grid grid-cols-3 gap-2">
           {(['wood', 'stone', 'concrete'] as const).map((mat) => {
             const isSelected = appearance.accentMaterial === mat;
@@ -115,10 +115,10 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
               <button
                 key={mat}
                 onClick={() => onChange({ ...appearance, accentMaterial: mat })}
-                className={`py-1.5 font-mono text-[10px] uppercase tracking-wider border text-center transition-all ${
+                className={`py-2 text-sm capitalize border text-center transition-colors ${
                   isSelected
-                    ? 'bg-stone-900 text-stone-50 border-stone-900 font-bold dark:bg-stone-100 dark:text-stone-900'
-                    : 'border-stone-300 text-stone-600 dark:text-stone-400 hover:border-stone-900'
+                    ? 'border-gold-400 bg-gold-400 font-semibold text-plum-950'
+                    : 'border-plum-600 text-stone-300 hover:border-gold-400'
                 }`}
               >
                 {mat}
@@ -128,8 +128,8 @@ export default function AppearancePanel({ appearance, onChange, onClose }: Appea
         </div>
       </div>
 
-      <div className="pt-2 text-[10px] font-mono text-stone-500 text-center border-t border-stone-200 dark:border-stone-800">
-        Material changes update 3D preview instantly without altering 2D plan geometry.
+      <div className="pt-3 text-xs text-stone-400 border-t border-plum-700">
+        Changes affect the 3D model only. The 2D plan is not altered.
       </div>
     </div>
   );

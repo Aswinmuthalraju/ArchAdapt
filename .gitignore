@@ -1,7 +1,21 @@
 node_modules/
 .next/
-.env.local
+.next-dev/
+.next-verify/
 *.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# Scratch, agent skills & cache, and internal memory
+scratch/
+.claude/
+.agents/
+.remember/
 
 # Local debug output
 npm-debug.log*

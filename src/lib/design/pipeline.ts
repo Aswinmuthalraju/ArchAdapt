@@ -62,6 +62,11 @@ interface StageResult {
   infeasible?: { reason: string; violatedConstraints: string[] };
 }
 
+const mirrorSides = (program: DesignProgram): DesignProgram => ({
+  ...program,
+  rooms: program.rooms.map((room) => ({ ...room, side: room.side === 'left' ? 'right' : room.side === 'right' ? 'left' : room.side }))
+});
+
 /** Programme → requirement check → geometry → full validation. Nothing reaches a renderer unless this passes. */
 export function realiseProgram(program: DesignProgram, site: SiteInfo, constraints: DesignConstraints): StageResult {
   const requirementErrors = validateProgramRequirements(program, constraints);
@@ -74,7 +79,11 @@ export function realiseProgram(program: DesignProgram, site: SiteInfo, constrain
   return { design: report.isValid ? layout.design : undefined, errors: report.errors, warnings: report.warnings, notes: layout.notes };
 }
 
-const localFallbackAllowed = () => process.env.ALLOW_ARCHADAPT_FALLBACK === 'true';
+/**
+ * Auto mode: the AI planner is tried first and the validated rule engine takes over, with a visible notice,
+ * when the planner is unreachable or cannot produce a valid plan. Set ARCHADAPT_STRICT_AI=true to disable the takeover.
+ */
+const localFallbackAllowed = () => process.env.ARCHADAPT_STRICT_AI !== 'true';
 
 function stamp(design: StructuredDesignJSON, intent: 'INITIAL_DESIGN' | 'GENERATE_ALTERNATIVE_CONCEPT', engine: EngineId, modelId: string, attempts: number, conceptNumber: number) {
   design.conceptNumber = conceptNumber;
@@ -92,12 +101,23 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
   const intent = input.alternativeTo ? 'GENERATE_ALTERNATIVE_CONCEPT' : 'INITIAL_DESIGN';
   const previousConcept = input.alternativeTo?.conceptNumber || 1;
   const conceptNumber = input.alternativeTo ? previousConcept + 1 : 1;
-  const variant = input.alternativeTo ? previousConcept % 3 : 0;
+  const firstVariant = input.alternativeTo ? previousConcept % 3 : 0;
   const custom = requirements.customRequirements || '';
 
   // Deterministic feasibility pre-check: if the bare brief cannot fit at minimum room sizes, say so
   // before spending an AI call, and never downgrade the brief to make it fit.
-  const baseline = realiseProgram(buildLocalProgram(site, location, constraints, custom, variant), site, constraints);
+  // A planning variant that does not validate is skipped for the next one, so the user is not left with an error
+  // when another arrangement of the same brief works.
+  // Variants 0-2 are different strategies; 3-5 repeat them left-to-right mirrored, which resolves briefs whose wet rooms land on the wrong side.
+  const localVariant = (n: number) => {
+    const program = buildLocalProgram(site, location, constraints, custom, n % 3);
+    return n < 3 ? program : mirrorSides(program);
+  };
+  let baseline = realiseProgram(localVariant(firstVariant), site, constraints);
+  for (let step = 1; step < 6 && !baseline.design && !baseline.infeasible; step++) {
+    const next = realiseProgram(localVariant((firstVariant + step) % 6), site, constraints);
+    if (next.design || next.infeasible) baseline = next;
+  }
   if (baseline.infeasible) {
     return { status: 'INFEASIBLE', reason: baseline.infeasible.reason, violatedConstraints: baseline.infeasible.violatedConstraints, attempts: 0, canUseLocalEngine: false };
   }
@@ -170,6 +190,9 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
     if (process.env.NODE_ENV !== 'production') console.warn(`[ARCHADAPT] attempt ${attempts} (${call.modelId}) failed validation:`, stage.errors);
   }
 
+  if (localFallbackAllowed() && baseline.design) {
+    return runLocal(`The AI planner could not produce a plan that passed every check in ${attempts} attempt${attempts === 1 ? '' : 's'}, so the built-in rule engine laid out this plan instead. It passed the same validation.`);
+  }
   return {
     status: 'INVALID_DESIGN',
     reason: `The AI planner did not produce a valid design in ${MAX_GENERATION_ATTEMPTS} attempts. Nothing was saved.`,

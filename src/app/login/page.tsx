@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Compass, Lock, Mail, ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import AuthShell from '@/components/auth/AuthShell';
 
 function LoginForm() {
   const router = useRouter();
@@ -15,7 +16,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(searchParams.get('registered') ? 'Account created. If your project asks for email confirmation, confirm your address first, then sign in.' : null);
 
   // Forgot password state
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -75,13 +76,13 @@ function LoginForm() {
       });
 
       if (error) {
-        // Clean error message without exposing internal details
-        if (
-          error.status === 400 ||
-          error.message?.toLowerCase().includes('invalid') ||
-          error.message?.toLowerCase().includes('credentials')
-        ) {
-          setErrorMessage('Invalid email or password.');
+        const code = (error as { code?: string }).code || '';
+        if (code === 'email_not_confirmed' || error.message?.toLowerCase().includes('not confirmed')) {
+          setErrorMessage('Your email address is not confirmed yet. Open the confirmation email we sent, then sign in.');
+        } else if (code === 'over_request_rate_limit' || error.status === 429) {
+          setErrorMessage('Too many attempts. Wait a few minutes and try again.');
+        } else if (error.status && error.status >= 500) {
+          setErrorMessage('The sign-in service had a problem. Please try again shortly.');
         } else {
           setErrorMessage('Invalid email or password.');
         }
@@ -130,44 +131,16 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-stone-900 flex flex-col justify-between">
-      {/* Minimal Top Brand Bar */}
-      <header className="w-full border-b border-stone-200 bg-[#F9F8F6]/90 backdrop-blur-md">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6 lg:px-12">
-          <Link href="/" className="group flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center bg-stone-900 text-stone-50 transition-transform group-hover:scale-105">
-              <Compass className="h-5 w-5 stroke-[1.5]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-serif text-xl font-medium tracking-tight text-stone-900">
-                ARCHADAPT<span className="font-mono text-xs text-terracotta-500 ml-1">AI</span>
-              </span>
-              <span className="font-mono text-[9px] uppercase tracking-widest text-stone-500">
-                Architectural Studio Engine
-              </span>
-            </div>
-          </Link>
-
-          <Link
-            href="/register"
-            className="font-sans text-xs font-semibold uppercase tracking-widest text-stone-700 hover:text-stone-950 transition-colors"
-          >
-            Create Account
-          </Link>
-        </div>
-      </header>
-
-      {/* Main Authentication Container */}
-      <main className="flex-1 flex items-center justify-center p-6 py-12">
-        <div className="w-full max-w-md border border-stone-200 bg-white p-8 sm:p-10 shadow-sm">
+    <AuthShell switchTo={{ href: '/register', prompt: 'New to ArchAdapt?', action: 'Create an account' }}>
+        <div className="w-full max-w-md">
           {!isForgotPassword ? (
             <>
               {/* Header */}
-              <div className="mb-8 text-center">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center bg-stone-900 text-stone-50">
+              <div className="mb-8">
+                <div className="mb-5 flex h-11 w-11 items-center justify-center bg-plum-900 text-gold-300">
                   <Lock className="h-5 w-5 stroke-[1.5]" />
                 </div>
-                <h1 className="font-serif text-3xl font-normal text-stone-950">Sign In</h1>
+                <h1 className="font-serif text-4xl font-medium text-stone-950">Sign In</h1>
                 <p className="mt-2 font-sans text-xs text-stone-600 leading-relaxed">
                   Enter your credentials to access your architectural projects and workspace.
                 </p>
@@ -189,7 +162,7 @@ function LoginForm() {
                 <div>
                   <label
                     htmlFor="login-email"
-                    className="block font-mono text-[11px] uppercase tracking-wider text-stone-700 mb-1.5"
+                    className="block text-[11px] text-stone-700 mb-1.5"
                   >
                     Email Address
                   </label>
@@ -215,7 +188,7 @@ function LoginForm() {
                   <div className="flex items-center justify-between mb-1.5">
                     <label
                       htmlFor="login-password"
-                      className="block font-mono text-[11px] uppercase tracking-wider text-stone-700"
+                      className="block text-[11px] text-stone-700"
                     >
                       Password
                     </label>
@@ -226,7 +199,7 @@ function LoginForm() {
                         setIsForgotPassword(true);
                         setErrorMessage(null);
                       }}
-                      className="font-mono text-[10px] uppercase tracking-wider text-stone-500 hover:text-terracotta-600 transition-colors"
+                      className="text-[11px] text-stone-500 hover:text-magenta-600 transition-colors"
                     >
                       Forgot Password?
                     </button>
@@ -259,10 +232,10 @@ function LoginForm() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex w-full items-center justify-center gap-2 bg-stone-900 py-3.5 px-4 font-sans text-xs font-semibold tracking-widest uppercase text-stone-50 hover:bg-stone-800 disabled:opacity-60 transition-all shadow-sm mt-2"
+                  className="flex w-full items-center justify-center gap-2 btn-gem py-3.5 px-4 text-sm font-semibold text-white disabled:opacity-60 transition-all mt-2"
                 >
                   {loading ? (
-                    <span className="font-mono text-xs">Authenticating…</span>
+                    <span className="text-xs">Authenticating…</span>
                   ) : (
                     <>
                       Sign In
@@ -278,7 +251,7 @@ function LoginForm() {
                   Don't have an account?{' '}
                   <Link
                     href={`/register${nextUrl !== '/dashboard' ? `?next=${encodeURIComponent(nextUrl)}` : ''}`}
-                    className="font-semibold text-terracotta-600 hover:text-terracotta-700 underline underline-offset-4 transition-colors"
+                    className="font-semibold text-magenta-600 hover:text-magenta-700 underline underline-offset-4 transition-colors"
                   >
                     Create Account
                   </Link>
@@ -296,7 +269,7 @@ function LoginForm() {
                     setResetSuccess(false);
                     setResetError(null);
                   }}
-                  className="mb-4 inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-stone-500 hover:text-stone-900 transition-colors"
+                  className="mb-4 inline-flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-900 transition-colors"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Back to Sign In
@@ -324,7 +297,7 @@ function LoginForm() {
                       setIsForgotPassword(false);
                       setResetSuccess(false);
                     }}
-                    className="w-full border border-stone-300 py-3 font-sans text-xs font-semibold tracking-wider uppercase text-stone-800 hover:border-stone-900 transition-colors"
+                    className="w-full border border-stone-300 py-3 font-sans text-xs font-semibold text-stone-800 hover:border-stone-900 transition-colors"
                   >
                     Return to Sign In
                   </button>
@@ -338,7 +311,7 @@ function LoginForm() {
                     </div>
                   )}
                   <div>
-                    <label className="block font-mono text-[11px] uppercase tracking-wider text-stone-700 mb-1">
+                    <label className="block text-[11px] text-stone-700 mb-1">
                       Email Address
                     </label>
                     <input
@@ -353,7 +326,7 @@ function LoginForm() {
                   <button
                     type="submit"
                     disabled={resetLoading}
-                    className="w-full bg-stone-900 py-3.5 font-sans text-xs font-semibold tracking-widest uppercase text-stone-50 hover:bg-stone-800 disabled:opacity-60 transition-all"
+                    className="w-full btn-gem py-3.5 text-sm font-semibold text-white disabled:opacity-60 transition-all"
                   >
                     {resetLoading ? 'Sending…' : 'Send Reset Link'}
                   </button>
@@ -363,24 +336,18 @@ function LoginForm() {
           )}
 
           {/* RLS Security Badge */}
-          <div className="mt-8 flex items-center justify-center gap-1.5 font-mono text-[10px] text-stone-500">
+          <div className="mt-8 flex items-center justify-center gap-1.5 text-[11px] text-stone-500">
             <ShieldCheck className="h-3.5 w-3.5 text-sage-500" />
             Protected by Supabase Row Level Security
           </div>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-stone-200 py-6 text-center font-mono text-[10px] uppercase text-stone-500">
-        ArchAdapt AI — Adaptive Architectural Design System
-      </footer>
-    </div>
+    </AuthShell>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center font-mono text-xs uppercase text-stone-500">Loading…</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#FBF8F4] flex items-center justify-center text-xs text-stone-500">Loading…</div>}>
       <LoginForm />
     </Suspense>
   );

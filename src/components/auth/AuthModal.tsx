@@ -1,5 +1,6 @@
 'use client';
 
+import { describeSignUpError } from '@/lib/supabase/authErrors';
 import React, { useState } from 'react';
 import { X, Lock, UserPlus, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
@@ -123,17 +124,8 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
       });
 
       if (error) {
-        const errorMsg = error.message?.toLowerCase() || '';
-        const errorCode = (error as any).code || '';
-        if (
-          errorCode === 'user_already_exists' ||
-          errorMsg.includes('already registered') ||
-          errorMsg.includes('already exists')
-        ) {
-          setErrorMessage('An account with this email already exists.');
-        } else {
-          setErrorMessage('Unable to create account. Please check your details and try again.');
-        }
+        console.warn('[auth] sign-up failed:', error.code, error.status, error.message);
+        setErrorMessage(describeSignUpError(error));
         return;
       }
 
@@ -170,7 +162,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-md border border-stone-200 bg-[#F9F8F6] p-8 shadow-2xl">
+      <div className="relative w-full max-w-md border border-stone-200 bg-[#FBF8F4] p-8 shadow-2xl">
         {/* Close button */}
         <button
           onClick={onClose}
@@ -188,7 +180,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
               setMode('login');
               setErrorMessage(null);
             }}
-            className={`flex-1 pb-3 font-mono text-xs uppercase tracking-wider text-center transition-all ${
+            className={`flex-1 pb-3 text-xs text-center transition-all ${
               mode === 'login'
                 ? 'border-b-2 border-stone-900 text-stone-950 font-bold'
                 : 'text-stone-500 hover:text-stone-900'
@@ -202,7 +194,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
               setMode('register');
               setErrorMessage(null);
             }}
-            className={`flex-1 pb-3 font-mono text-xs uppercase tracking-wider text-center transition-all ${
+            className={`flex-1 pb-3 text-xs text-center transition-all ${
               mode === 'register'
                 ? 'border-b-2 border-stone-900 text-stone-950 font-bold'
                 : 'text-stone-500 hover:text-stone-900'
@@ -214,7 +206,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
 
         {/* Header */}
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center bg-stone-900 text-stone-50">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center bg-plum-900 text-gold-300">
             {mode === 'login' ? <Lock className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
           </div>
           <h2 className="font-serif text-2xl font-normal text-stone-900">
@@ -242,7 +234,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         {mode === 'login' ? (
           <form onSubmit={handleLogin} className="space-y-4" noValidate>
             <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-stone-600 mb-1">
+              <label className="block text-[11px] text-stone-600 mb-1">
                 Email Address
               </label>
               <input
@@ -259,7 +251,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-stone-600 mb-1">
+              <label className="block text-[11px] text-stone-600 mb-1">
                 Password
               </label>
               <div className="relative">
@@ -287,7 +279,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 bg-stone-900 py-3.5 font-sans text-xs font-semibold tracking-widest uppercase text-stone-50 hover:bg-stone-800 disabled:opacity-60 transition-all shadow-sm"
+              className="flex w-full items-center justify-center gap-2 btn-gem py-3.5 text-sm font-semibold text-white disabled:opacity-60 transition-all shadow-sm"
             >
               {loading ? (
                 'Signing In…'
@@ -303,7 +295,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
           /* Register Form */
           <form onSubmit={handleRegister} className="space-y-3" noValidate>
             <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-stone-600 mb-1">
+              <label className="block text-[11px] text-stone-600 mb-1">
                 Full Name
               </label>
               <input
@@ -320,7 +312,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-stone-600 mb-1">
+              <label className="block text-[11px] text-stone-600 mb-1">
                 Email Address
               </label>
               <input
@@ -337,7 +329,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-stone-600 mb-1">
+              <label className="block text-[11px] text-stone-600 mb-1">
                 Password
               </label>
               <div className="relative">
@@ -363,7 +355,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-stone-600 mb-1">
+              <label className="block text-[11px] text-stone-600 mb-1">
                 Confirm Password
               </label>
               <input
@@ -382,7 +374,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 bg-stone-900 py-3 font-sans text-xs font-semibold tracking-widest uppercase text-stone-50 hover:bg-stone-800 disabled:opacity-60 transition-all shadow-sm mt-2"
+              className="flex w-full items-center justify-center gap-2 btn-gem py-3 text-sm font-semibold text-white disabled:opacity-60 transition-all shadow-sm mt-2"
             >
               {loading ? (
                 'Creating Account…'
@@ -396,7 +388,7 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
           </form>
         )}
 
-        <div className="mt-6 flex items-center justify-center gap-1.5 text-[10px] text-stone-500 font-mono">
+        <div className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-stone-500 ">
           <ShieldCheck className="h-3.5 w-3.5 text-sage-500" />
           Secured by Supabase Row Level Security
         </div>

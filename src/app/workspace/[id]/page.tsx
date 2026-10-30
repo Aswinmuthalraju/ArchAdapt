@@ -6,7 +6,10 @@ import Link from 'next/link';
 import FloorPlan2DRenderer from '@/components/canvas/FloorPlan2DRenderer';
 import Massing3DViewer from '@/components/canvas/Massing3DViewer';
 import VersionComparisonModal from '@/components/workspace/VersionComparisonModal';
-import { Layers, Box, Send, Sparkles, ArrowLeft, History, Download, GitCompare, CheckCircle, AlertTriangle } from 'lucide-react';
+import DrawingSetPanel from '@/components/workspace/DrawingSetPanel';
+import ExportMenu from '@/components/workspace/ExportMenu';
+import { analyseDesign, DEFAULT_LIMITS, PlanLimits } from '@/lib/pro/analysis';
+import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare } from 'lucide-react';
 import { Project, FloorPlanVersion, StructuredDesignJSON, WhatIfMessage } from '@/types/architectural';
 import { supabase, authHeaders } from '@/lib/supabase/client';
 import { getUserProjectsFromSupabase, setCurrentVersionInSupabase } from '@/lib/services/projectService';
@@ -32,7 +35,7 @@ export default function WorkspacePage() {
 
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [project, setProject] = useState<Project | null>(null);
-  const [activeTab, setActiveTab] = useState<'2d' | '3d'>('2d');
+  const [activeTab, setActiveTab] = useState<'2d' | '3d' | 'sheet' | 'ask'>('2d');
   const [currentVersion, setCurrentVersion] = useState<FloorPlanVersion | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<string | undefined>(undefined);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
@@ -42,6 +45,18 @@ export default function WorkspacePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [limits, setLimits] = useState<PlanLimits>(DEFAULT_LIMITS);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('archadapt_limits');
+      if (stored) setLimits({ ...DEFAULT_LIMITS, ...JSON.parse(stored) });
+    } catch { /* defaults */ }
+  }, []);
+  const updateLimits = (next: PlanLimits) => {
+    setLimits(next);
+    try { localStorage.setItem('archadapt_limits', JSON.stringify(next)); } catch { /* storage unavailable */ }
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -135,6 +150,8 @@ export default function WorkspacePage() {
     if (!activeDesign) return null;
     return { validation: validateFloorPlan(activeDesign), consistency: checkRenderConsistency(activeDesign) };
   }, [activeDesign]);
+
+  const analysis = useMemo(() => (activeDesign ? analyseDesign(activeDesign, limits) : null), [activeDesign, limits]);
 
   const pushMessages = (messages: WhatIfMessage[], localProjectId?: string) => {
     setChatMessages((prev) => {
@@ -255,35 +272,24 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleExport = () => {
-    if (!project || !currentVersion || !activeDesign) return;
-    const blob = new Blob([JSON.stringify({ project: project.title, version: currentVersion.versionNumber, design: activeDesign }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${project.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-v${currentVersion.versionNumber}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
   if (loadState === 'loading') {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center font-mono text-xs uppercase tracking-wider text-stone-500">
-        Loading project…
+      <div className="flex min-h-screen items-center justify-center bg-plum-900 text-sm text-stone-400" role="status">
+        Opening your project…
       </div>
     );
   }
 
   if (loadState === 'not_found' || !project || !currentVersion || !activeDesign) {
     return (
-      <div className="min-h-screen bg-[#F9F8F6] flex flex-col items-center justify-center gap-4 px-6 text-center">
-        <h1 className="font-serif text-2xl text-stone-900">Project not found</h1>
-        <p className="font-sans text-sm text-stone-600 max-w-md">
-          No saved design exists for this project in your account or in this browser. If you created it while signed in, sign in again to open it.
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-stone-50 px-6 text-center">
+        <h1 className="font-serif text-3xl font-medium text-stone-900">We couldn&apos;t find that project</h1>
+        <p className="max-w-md leading-relaxed text-stone-600">
+          No saved design exists for it in your account or in this browser. If you made it while signed in, sign in again to open it.
         </p>
         <div className="flex gap-3">
-          <Link href="/dashboard" className="border border-stone-900 px-6 py-3 font-mono text-xs uppercase tracking-widest text-stone-900 hover:bg-stone-100">My Projects</Link>
-          <Link href="/onboarding" className="bg-stone-900 px-6 py-3 font-mono text-xs uppercase tracking-widest text-stone-50 hover:bg-stone-800">Create a Project</Link>
+          <Link href="/dashboard" className="border border-stone-900 px-6 py-3 text-sm font-medium text-stone-900 hover:bg-stone-900 hover:text-gold-200">My projects</Link>
+          <Link href="/onboarding" className="btn-gem px-6 py-3 text-sm font-semibold text-white">Start a plan</Link>
         </div>
       </div>
     );
@@ -294,148 +300,204 @@ export default function WorkspacePage() {
   const bedroomCount = countBedrooms(activeDesign);
   const bathroomCount = countRoomsOfType(activeDesign, 'bathroom');
   const notes = activeDesign.layoutNotes || [];
+  const heading = 'text-sm font-semibold text-gold-300';
+  const chip = 'inline-flex items-center gap-1 border px-2 py-0.5 text-xs';
+  const fact = (label: string, value: React.ReactNode) => (
+    <div className="flex items-baseline justify-between border-b border-plum-700 py-2 text-sm last:border-0">
+      <dt className="text-stone-400">{label}</dt>
+      <dd className="font-medium text-stone-100">{value}</dd>
+    </div>
+  );
+
+  const chat = (
+    <>
+  <div className="flex items-center gap-3 border-b border-plum-700 p-4">
+    <div className="btn-gem flex h-9 w-9 items-center justify-center text-white">
+      <Sparkles className="h-4 w-4" />
+    </div>
+    <div>
+      <h2 className="font-serif text-lg font-medium leading-none text-stone-50">What-if assistant</h2>
+      <p className="mt-1 text-xs text-stone-400">Edits version {currentVersion.versionNumber}</p>
+    </div>
+  </div>
+
+  <div className="scrollbar-plum flex-1 space-y-4 overflow-y-auto p-4 text-sm select-text">
+    {chatMessages.map((msg) => (
+      <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
+        <div className={`max-w-[92%] border p-3.5 ${msg.sender === 'user' ? 'border-magenta-500/50 bg-magenta-600/20 text-stone-50' : 'border-plum-700 bg-plum-900 text-stone-200'}`}>
+          <div className="mb-1 flex items-center justify-between gap-4 text-xs text-stone-400">
+            <span className={msg.sender === 'user' ? 'text-magenta-200' : 'text-gold-300'}>{msg.sender === 'user' ? 'You' : 'ArchAdapt'}</span>
+            <span>{msg.timestamp}</span>
+          </div>
+          <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+        </div>
+      </div>
+    ))}
+    {isProcessing && (
+      <div className="flex items-center gap-2 text-sm text-stone-300" role="status">
+        <Sparkles className="h-4 w-4 animate-spin text-gold-300" />
+        Working out the change and re-checking the plan… {elapsed}s
+      </div>
+    )}
+    <div ref={chatEndRef} />
+  </div>
+
+  <form onSubmit={handleWhatIfSubmit} className="border-t border-plum-700 bg-plum-800 p-4">
+    <label htmlFor="whatif" className="sr-only">Ask for a change</label>
+    <div className="relative flex items-center">
+      <input
+        id="whatif"
+        type="text"
+        value={inputPrompt}
+        onChange={(e) => setInputPrompt(e.target.value)}
+        disabled={isProcessing}
+        maxLength={2000}
+        placeholder="Try: add a bedroom upstairs"
+        className="w-full border border-plum-600 bg-plum-900 py-3 pl-4 pr-11 text-sm text-stone-100 placeholder-stone-500 focus:border-gold-400 focus:outline-none disabled:opacity-60"
+      />
+      <button type="submit" disabled={isProcessing || !inputPrompt.trim()} className="absolute right-2 p-1.5 text-gold-300 transition-colors hover:text-gold-100 disabled:opacity-40" title="Send" aria-label="Send">
+        <Send className="h-4 w-4" />
+      </button>
+    </div>
+    <p className="mt-2 text-xs text-stone-500">Each accepted change becomes a new version. Earlier versions are kept.</p>
+  </form>
+
+    </>
+  );
 
   return (
-    <div className="flex flex-col h-screen bg-[#111315] text-stone-100 overflow-hidden select-none">
-      {/* Workspace Top Bar */}
-      <header className="min-h-16 border-b border-stone-800 bg-[#15181C] px-6 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-4 min-w-0">
-          <Link href="/dashboard" className="text-stone-400 hover:text-stone-100 transition-colors" title="Back to My Projects">
+    <div className="flex h-screen flex-col overflow-hidden bg-plum-900 text-stone-100 select-none">
+      <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-plum-700 bg-plum-850 px-5 py-2">
+        <div className="flex min-w-0 items-center gap-4">
+          <Link href="/dashboard" className="text-stone-400 transition-colors hover:text-gold-200" title="Back to my projects" aria-label="Back to my projects">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div className="h-5 w-px bg-stone-800"></div>
+          <div className="h-6 w-px bg-plum-700" />
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 font-serif text-lg font-medium text-stone-100">
-              <span className="truncate">{project.title}</span>
-              <span className="font-mono text-[10px] uppercase bg-stone-800 text-terracotta-400 px-2 py-0.5 border border-stone-700">
-                Version {currentVersion.versionNumber}
-              </span>
-              <span className={`font-mono text-[10px] uppercase px-2 py-0.5 border flex items-center gap-1 ${meta?.engine === 'gemini' ? 'bg-amber-950/80 text-amber-300 border-amber-700/50' : 'bg-stone-800 text-stone-300 border-stone-700'}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate font-serif text-xl font-medium text-stone-50">{project.title}</h1>
+              <span className={`${chip} border-gold-400/50 text-gold-300`}>Version {currentVersion.versionNumber}</span>
+              <span className={`${chip} ${meta?.engine === 'gemini' ? 'border-magenta-400/50 text-magenta-300' : 'border-plum-600 text-stone-300'}`}>
                 <Sparkles className="h-3 w-3" />
                 {engineLabel}
               </span>
               {project.storage !== 'supabase' && (
-                <span className="font-mono text-[10px] uppercase bg-stone-800 text-stone-300 px-2 py-0.5 border border-stone-700" title="Sign in before creating a project to save it to your account">
+                <span className={`${chip} border-plum-600 text-stone-300`} title="Sign in before creating a project to save it to your account">
                   Saved in this browser only
                 </span>
               )}
             </div>
-            <div className="font-mono text-[10px] uppercase text-stone-500 flex flex-wrap items-center gap-x-3">
-              <span>{project.location.city}, {project.location.country}</span>
-              <span>•</span>
-              <span>{activeDesign.plot.width}' × {activeDesign.plot.depth}' Plot</span>
-              <span>•</span>
-              <span>{project.preferences.primaryStyle}</span>
-            </div>
+            <p className="mt-0.5 text-xs text-stone-400">
+              {project.location.city}, {project.location.country} · {activeDesign.plot.width}′ × {activeDesign.plot.depth}′ plot · {project.preferences.primaryStyle}
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center border border-stone-700 bg-stone-900 p-1">
-          <button
-            onClick={() => setActiveTab('2d')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 font-mono text-xs uppercase tracking-wider transition-all ${activeTab === '2d' ? 'bg-stone-100 text-stone-950 font-bold' : 'text-stone-400 hover:text-stone-100'}`}
-          >
-            <Layers className="h-3.5 w-3.5" />
-            2D Floor Plan
-          </button>
-          <button
-            onClick={() => setActiveTab('3d')}
-            className={`flex items-center gap-1.5 px-4 py-1.5 font-mono text-xs uppercase tracking-wider transition-all ${activeTab === '3d' ? 'bg-stone-100 text-stone-950 font-bold' : 'text-stone-400 hover:text-stone-100'}`}
-          >
-            <Box className="h-3.5 w-3.5" />
-            3D Model
-          </button>
+        <div role="tablist" aria-label="View" className="flex max-w-full overflow-x-auto border border-plum-600 bg-plum-800 p-0.5">
+          {([['2d', 'Floor plan', Layers], ['3d', '3D model', Box], ['sheet', 'Drawing set', ClipboardList], ['ask', 'Assistant', MessageSquare]] as const).map(([id, label, Icon]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={activeTab === id}
+              onClick={() => setActiveTab(id)}
+              className={`${id === 'ask' ? 'xl:hidden ' : ''}flex items-center gap-2 px-3 py-1.5 text-sm transition-colors sm:px-4 ${activeTab === id ? 'bg-gold-400 font-semibold text-plum-950' : 'text-stone-300 hover:text-gold-200'}`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
         </div>
 
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 border border-stone-700 px-3 py-1.5 font-mono text-xs text-stone-300 hover:border-stone-500 hover:text-stone-100 transition-all"
-          title="Download this version's design data as JSON"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export JSON
-        </button>
+        <ExportMenu
+          design={activeDesign}
+          analysis={analysis!}
+          title={project.title}
+          version={currentVersion.versionNumber}
+          location={`${project.location.city}, ${project.location.country}`}
+          style={project.preferences.primaryStyle}
+          engine={engineLabel}
+        />
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* PANEL 1 (LEFT): Design facts, validation, version history */}
-        <aside className="w-80 border-r border-stone-800 bg-[#15181C] flex flex-col shrink-0 overflow-y-auto">
-          <div className="p-6 border-b border-stone-800 space-y-3">
-            <h3 className="font-mono text-xs uppercase font-semibold text-stone-400 tracking-wider">This Version</h3>
-            <div className="space-y-2 font-mono text-xs">
-              <div className="flex items-center justify-between"><span className="text-stone-500">BEDROOMS</span><span className="text-stone-200">{bedroomCount}</span></div>
-              <div className="flex items-center justify-between"><span className="text-stone-500">BATHROOMS</span><span className="text-stone-200">{bathroomCount}</span></div>
-              <div className="flex items-center justify-between"><span className="text-stone-500">FLOORS</span><span className="text-stone-200">{activeDesign.floorsCount}</span></div>
-              <div className="flex items-center justify-between"><span className="text-stone-500">BUILT-UP AREA</span><span className="text-stone-200">{activeDesign.totalBuiltUpAreaSqFt || 0} SQ FT</span></div>
-            </div>
+      <div className="flex flex-1 overflow-hidden">
+        <aside className="scrollbar-plum hidden w-80 shrink-0 flex-col overflow-y-auto border-r border-plum-700 bg-plum-850 lg:flex">
+          <section className="space-y-2 border-b border-plum-700 p-5">
+            <h2 className={heading}>This version</h2>
+            <dl>
+              {fact('Bedrooms', bedroomCount)}
+              {fact('Bathrooms', bathroomCount)}
+              {fact('Floors', activeDesign.floorsCount)}
+              {fact('Built-up area', `${activeDesign.totalBuiltUpAreaSqFt || 0} sq ft`)}
+            </dl>
             {project.preferences.modes.length > 0 && (
-              <div className="pt-1 flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 pt-1">
                 {project.preferences.modes.map((m) => (
-                  <span key={m} className="bg-stone-800 border border-stone-700 text-terracotta-400 px-2 py-0.5 font-mono text-[9px] uppercase">
+                  <span key={m} className={`${chip} border-magenta-400/40 capitalize text-magenta-300`}>
                     {m.replace(/_/g, ' ')}
                   </span>
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
           {checks && (
-            <div className="p-6 border-b border-stone-800 space-y-2">
-              <h3 className="font-mono text-xs uppercase font-semibold text-stone-400 tracking-wider">Validation</h3>
-              <div className={`flex items-start gap-2 font-sans text-xs ${checks.validation.isValid ? 'text-emerald-400' : 'text-red-400'}`}>
-                {checks.validation.isValid ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
-                <span>{checks.validation.isValid ? 'Requirements, geometry and circulation checks pass.' : `${checks.validation.errors.length} problem(s) found in this version.`}</span>
-              </div>
-              <div className={`flex items-start gap-2 font-sans text-xs ${checks.consistency.consistent ? 'text-emerald-400' : 'text-red-400'}`}>
-                {checks.consistency.consistent ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertTriangle className="h-4 w-4 shrink-0" />}
-                <span>{checks.consistency.consistent ? '2D plan and 3D model contain the same rooms.' : checks.consistency.problems[0]}</span>
-              </div>
-              {[...checks.validation.errors, ...checks.validation.warnings, ...notes].slice(0, 6).map((line, index) => (
-                <p key={index} className="font-sans text-[11px] text-stone-400 leading-snug">• {line}</p>
+            <section className="space-y-2.5 border-b border-plum-700 p-5">
+              <h2 className={heading}>Checks</h2>
+              {[
+                { ok: checks.validation.isValid, good: 'Requirements, geometry and circulation all pass.', bad: `${checks.validation.errors.length} problem(s) found in this version.` },
+                { ok: checks.consistency.consistent, good: 'The 2D plan and 3D model are the same house.', bad: checks.consistency.problems[0] }
+              ].map((row, index) => (
+                <div key={index} className={`flex items-start gap-2 text-sm leading-snug ${row.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {row.ok ? <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+                  <span>{row.ok ? row.good : row.bad}</span>
+                </div>
               ))}
-            </div>
+              {[...checks.validation.errors, ...checks.validation.warnings, ...notes].slice(0, 6).map((line, index) => (
+                <p key={index} className="border-l border-gold-400/40 pl-3 text-xs leading-snug text-stone-400">{line}</p>
+              ))}
+            </section>
           )}
 
-          <div className="p-6 border-b border-stone-800">
-            <h3 className="font-mono text-xs uppercase font-semibold text-stone-400 tracking-wider mb-2">Architectural Rationale</h3>
-            <p className="font-sans text-xs text-stone-300 leading-relaxed">{activeDesign.rationale || currentVersion.rationale}</p>
+          <section className="border-b border-plum-700 p-5">
+            <h2 className={`${heading} mb-2`}>Why it&apos;s laid out this way</h2>
+            <p className="text-sm leading-relaxed text-stone-300">{activeDesign.rationale || currentVersion.rationale}</p>
             {(activeDesign.modeConsiderations || []).map((item) => (
-              <p key={item.mode} className="font-sans text-[11px] text-stone-400 leading-snug mt-2">
-                <span className="font-mono uppercase text-terracotta-400">{item.mode.replace(/_/g, ' ')}: </span>
+              <p key={item.mode} className="mt-2.5 text-xs leading-snug text-stone-400">
+                <span className="font-semibold capitalize text-gold-300">{item.mode.replace(/_/g, ' ')}: </span>
                 {item.note}
               </p>
             ))}
-          </div>
+          </section>
 
-          <div className="p-6 flex-1">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-mono text-xs uppercase font-semibold text-stone-400 tracking-wider flex items-center gap-1.5">
-                <History className="h-3.5 w-3.5 text-terracotta-500" />
-                Version History
-              </h3>
-              <span className="font-mono text-[10px] text-stone-500">{project.versions.length} {project.versions.length === 1 ? 'Version' : 'Versions'}</span>
+          <section className="flex-1 p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className={`${heading} flex items-center gap-1.5`}>
+                <History className="h-4 w-4" />
+                Version history
+              </h2>
+              <span className="text-xs text-stone-400">{project.versions.length} {project.versions.length === 1 ? 'version' : 'versions'}</span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {project.versions.slice().reverse().map((ver) => {
                 const isActive = ver.id === currentVersion.id;
                 return (
-                  <div key={ver.id} className={`p-3 border transition-all ${isActive ? 'border-terracotta-500 bg-stone-900 text-stone-100' : 'border-stone-800 bg-[#111315] text-stone-400 hover:border-stone-700'}`}>
-                    <div className="flex items-center justify-between font-mono text-[10px] uppercase font-bold">
-                      <span className={isActive ? 'text-terracotta-400' : 'text-stone-500'}>VERSION {ver.versionNumber} {isActive && '(VIEWING)'}</span>
-                      <span className="text-stone-500">{countBedrooms(ver.structuredDesign)} BED · {ver.structuredDesign.floorsCount} FL</span>
+                  <div key={ver.id} className={`border p-3 transition-colors ${isActive ? 'border-gold-400 bg-plum-800' : 'border-plum-700 bg-plum-900 hover:border-plum-600'}`}>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className={isActive ? 'font-semibold text-gold-300' : 'text-stone-400'}>Version {ver.versionNumber}{isActive && ' · viewing'}</span>
+                      <span className="text-stone-500">{countBedrooms(ver.structuredDesign)} bed · {ver.structuredDesign.floorsCount} fl</span>
                     </div>
-                    <p className="font-serif text-sm font-normal text-stone-200 mt-1">{ver.title}</p>
+                    <p className="mt-1 font-serif text-base text-stone-100">{ver.title}</p>
                     {!isActive && (
-                      <div className="mt-3 flex items-center gap-2 pt-2 border-t border-stone-800 font-mono text-[10px]">
-                        <button onClick={() => activateVersion(ver)} className="px-2.5 py-1 uppercase border border-stone-700 text-stone-300 hover:border-stone-500">
+                      <div className="mt-2.5 flex items-center gap-2 border-t border-plum-700 pt-2.5 text-xs">
+                        <button onClick={() => activateVersion(ver)} className="border border-plum-600 px-2.5 py-1 text-stone-200 transition-colors hover:border-gold-400 hover:text-gold-200">
                           View
                         </button>
                         <button
                           onClick={() => { setCompareVersionA(ver); setIsCompareOpen(true); }}
-                          className="flex items-center gap-1 px-2 py-1 text-stone-400 hover:text-stone-100 uppercase"
+                          className="flex items-center gap-1 px-2 py-1 text-stone-400 transition-colors hover:text-gold-200"
                         >
-                          <GitCompare className="h-3 w-3" />
+                          <GitCompare className="h-3.5 w-3.5" />
                           Compare
                         </button>
                       </div>
@@ -444,71 +506,20 @@ export default function WorkspacePage() {
                 );
               })}
             </div>
-          </div>
+          </section>
         </aside>
 
-        {/* PANEL 2 (CENTER): both views render the same canonical design object */}
-        <main className="flex-1 bg-[#0F1115] relative overflow-hidden flex flex-col">
-          {activeTab === '2d' ? (
-            <FloorPlan2DRenderer design={activeDesign} selectedRoomId={selectedRoomId} onRoomSelect={(room) => setSelectedRoomId(room.id)} />
-          ) : (
-            <Massing3DViewer design={activeDesign} />
+        {/* Both views render the same canonical design object */}
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-plum-950">
+          {activeTab === '2d' && <FloorPlan2DRenderer design={activeDesign} selectedRoomId={selectedRoomId} onRoomSelect={(room) => setSelectedRoomId(room && room.id !== selectedRoomId ? room.id : undefined)} />}
+          {activeTab === '3d' && <Massing3DViewer design={activeDesign} />}
+          {activeTab === 'sheet' && analysis && (
+            <DrawingSetPanel analysis={analysis} limits={limits} onLimitsChange={updateLimits} onRoomSelect={(id) => { setSelectedRoomId(id); setActiveTab('2d'); }} />
           )}
+          {activeTab === 'ask' && <div className="flex h-full flex-col bg-plum-850">{chat}</div>}
         </main>
 
-        {/* PANEL 3 (RIGHT): What-If Assistant */}
-        <aside className="w-96 border-l border-stone-800 bg-[#15181C] flex flex-col shrink-0">
-          <div className="p-4 border-b border-stone-800 flex items-center gap-2 bg-[#181A1D]">
-            <div className="flex h-7 w-7 items-center justify-center bg-terracotta-500 text-stone-950 font-bold">
-              <Sparkles className="h-4 w-4 stroke-[2]" />
-            </div>
-            <div>
-              <h3 className="font-serif text-sm font-medium text-stone-100">What-If Assistant</h3>
-              <span className="font-mono text-[9px] uppercase tracking-wider text-stone-500">Edits version {currentVersion.versionNumber}</span>
-            </div>
-          </div>
-
-          <div className="flex-1 p-4 overflow-y-auto space-y-4 font-sans text-xs select-text">
-            {chatMessages.map((msg) => (
-              <div key={msg.id} className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`max-w-[90%] p-3.5 rounded-none border ${msg.sender === 'user' ? 'bg-stone-800 border-stone-700 text-stone-100' : 'bg-[#111315] border-stone-800 text-stone-300'}`}>
-                  <div className="font-mono text-[9px] uppercase tracking-wider text-stone-500 mb-1 flex items-center justify-between gap-4">
-                    <span>{msg.sender === 'user' ? 'You' : 'ArchAdapt'}</span>
-                    <span>{msg.timestamp}</span>
-                  </div>
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                </div>
-              </div>
-            ))}
-            {isProcessing && (
-              <div className="flex items-center gap-2 text-stone-500 font-mono text-xs">
-                <Sparkles className="h-3.5 w-3.5 animate-spin text-terracotta-400" />
-                Working out the change and re-checking the plan… {elapsed}s
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          <form onSubmit={handleWhatIfSubmit} className="p-4 border-t border-stone-800 bg-[#181A1D]">
-            <div className="relative flex items-center">
-              <input
-                type="text"
-                value={inputPrompt}
-                onChange={(e) => setInputPrompt(e.target.value)}
-                disabled={isProcessing}
-                maxLength={2000}
-                placeholder="e.g. Add a bedroom upstairs"
-                className="w-full border border-stone-700 bg-stone-900 px-4 py-3 text-xs text-stone-100 placeholder-stone-500 focus:border-stone-500 focus:outline-none pr-10 font-sans disabled:opacity-60"
-              />
-              <button type="submit" disabled={isProcessing || !inputPrompt.trim()} className="absolute right-2 p-1.5 text-stone-400 hover:text-terracotta-400 disabled:opacity-40 transition-colors" title="Send">
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-2 font-mono text-[9px] text-stone-500">
-              Each accepted change becomes a new version; earlier versions are kept.
-            </div>
-          </form>
-        </aside>
+        {activeTab !== 'ask' && <aside className="hidden w-96 shrink-0 flex-col border-l border-plum-700 bg-plum-850 xl:flex">{chat}</aside>}
       </div>
 
       <VersionComparisonModal

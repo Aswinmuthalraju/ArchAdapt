@@ -2,6 +2,7 @@ import { FloorPlanOpening, HouseAppearance, RoomType, StructuredDesignJSON } fro
 import { normalizeStyleName, NormalizedStyle } from '@/lib/design/styleNormalizer';
 import { ROOM_TYPE_SPECS, countBedrooms, inferRoomType } from '@/lib/design/roomTypes';
 import { OPEN_TYPES, PlanCell, WallSegment, deriveWallSegments, designCells, exteriorSegments } from './planGeometry';
+import { StairFoot, planStair, stairY } from './stairGeometry';
 
 type Vec3 = [number, number, number];
 
@@ -48,6 +49,8 @@ export interface HouseGeometry3D {
   ceilings: Box3D[];
   walls: WallPiece3D[];
   openings: OpeningMesh3D[];
+  /** Jambs, heads and sills around doors and windows. */
+  frames: Box3D[];
   stairSteps: Box3D[];
   railings: Box3D[];
   pillars: { position: Vec3; height: number; radius: number; floorLevel: number }[];
@@ -78,7 +81,9 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
   const plotWidth = design.plot?.width || 40;
   const plotDepth = design.plot?.depth || 60;
   const cells = designCells(design);
-  const X = (ft: number) => (ft - plotWidth / 2) * FT;
+  // Plan x grows to the right when looking at the plan with the road at the top. The camera looks at the
+  // road side from -Z, where +X is on the viewer's left, so x is mirrored here to keep 3D and 2D the same way round.
+  const X = (ft: number) => (plotWidth / 2 - ft) * FT;
   const Z = (ft: number) => (ft - plotDepth / 2) * FT;
   const baseY = (level: number) => PLINTH + level * STORY_HEIGHT;
   const maxLevel = Math.max(0, ...cells.map((cell) => cell.floor));
@@ -92,8 +97,13 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
     if (cell.type === 'void') continue;
     const source = design.rooms.find((room) => room.id === cell.id)!;
     const cx = X(cell.rect.x + cell.rect.w / 2);
-    const cz = Z(cell.rect.y + cell.rect.d / 2);
-    const size: Vec3 = [cell.rect.w * FT, SLAB, cell.rect.d * FT];
+    // Above the ground floor the stair cell is open to the flight below, except for the landing at its foot.
+    const stairFoot: StairFoot = design.stairs?.[0]?.footSide || 'rear';
+    const wellOnly = cell.type === 'stair' && cell.floor > 0;
+    const plate = wellOnly ? planStair(cell.rect, stairFoot) : null;
+    const depthFt = plate ? plate.footDepth : cell.rect.d;
+    const cz = Z(plate ? stairY(cell.rect, stairFoot, plate.footDepth / 2) : cell.rect.y + cell.rect.d / 2);
+    const size: Vec3 = [cell.rect.w * FT, SLAB, depthFt * FT];
     rooms.push({
       id: cell.id,
       name: source.name,
@@ -130,6 +140,7 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
 
   const walls: WallPiece3D[] = [];
   const openings: OpeningMesh3D[] = [];
+  const frames: Box3D[] = [];
   const located = (design.openings || [])
     .filter((op): op is FloorPlanOpening & { orientation: 'horizontal' | 'vertical' } => !!op.orientation)
     .map((op) => ({ op, xFt: (op.x / 100) * plotWidth, yFt: (op.y / 100) * plotDepth, floor: op.floorLevel || 0 }));
@@ -139,8 +150,12 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
     const thickness = seg.isExterior ? 0.23 : 0.115;
     const y0 = baseY(seg.floor);
     const height = STORY_HEIGHT - SLAB;
-    const piece = (from: number, to: number, bottom: number, top: number) => {
-      if (to - from < 0.02 || top - bottom < 0.02) return;
+    // Wall ends overrun by half a wall thickness so corners and T-junctions close without a notch.
+    const overrun = thickness / 2 / FT;
+    const piece = (rawFrom: number, rawTo: number, bottom: number, top: number) => {
+      if (rawTo - rawFrom < 0.02 || top - bottom < 0.02) return;
+      const from = Math.abs(rawFrom - seg.start) < 1e-6 ? rawFrom - overrun : rawFrom;
+      const to = Math.abs(rawTo - seg.end) < 1e-6 ? rawTo + overrun : rawTo;
       const mid = (from + to) / 2;
       const length = (to - from) * FT;
       walls.push({
@@ -168,6 +183,17 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
       piece(from, to, head, height); // lintel
       const mid = (from + to) / 2;
       const span = (to - from) * FT;
+      const bar = (a: number, b: number, bottom: number, top: number) => {
+        // A frame member spanning [a, b] along the wall between two heights.
+        const m = (a + b) / 2;
+        const d = thickness + 0.04;
+        frames.push({
+          position: seg.orientation === 'horizontal' ? [X(m), y0 + (bottom + top) / 2, Z(seg.at)] : [X(seg.at), y0 + (bottom + top) / 2, Z(m)],
+          size: seg.orientation === 'horizontal' ? [(b - a) * FT, top - bottom, d] : [d, top - bottom, (b - a) * FT],
+          floorLevel: seg.floor
+        });
+      };
+      const jamb = 0.06 / FT;
       const at = (bottom: number, top: number, depth: number): Box3D => ({
         position: seg.orientation === 'horizontal' ? [X(mid), y0 + (bottom + top) / 2, Z(seg.at)] : [X(seg.at), y0 + (bottom + top) / 2, Z(mid)],
         size: seg.orientation === 'horizontal' ? [span, top - bottom, depth] : [depth, top - bottom, span],
@@ -175,44 +201,65 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
       });
       if (op.type === 'window') {
         piece(from, to, 0, SILL);
-        openings.push({ id: op.id, kind: 'window', ...at(SILL, head, 0.05) });
+        openings.push({ id: op.id, kind: 'window', ...at(SILL, head, 0.04) });
+        bar(from, from + jamb, SILL, head);
+        bar(to - jamb, to, SILL, head);
+        bar(from, to, SILL, SILL + 0.05);
+        bar(from, to, head - 0.05, head);
+        bar((from + to) / 2 - jamb / 2, (from + to) / 2 + jamb / 2, SILL, head);
       } else if (op.type === 'sliding_glass') {
-        openings.push({ id: op.id, kind: 'sliding_glass', ...at(0, head, 0.05) });
+        openings.push({ id: op.id, kind: 'sliding_glass', ...at(0, head, 0.04) });
+        bar(from, from + jamb, 0, head);
+        bar(to - jamb, to, 0, head);
+        bar(from, to, head - 0.05, head);
+        bar((from + to) / 2 - jamb / 2, (from + to) / 2 + jamb / 2, 0, head);
       } else if (op.type === 'door') {
-        openings.push({ id: op.id, kind: 'door', ...at(0, head, 0.06) });
+        openings.push({ id: op.id, kind: 'door', ...at(0, head - 0.05, 0.05) });
+        bar(from, from + jamb, 0, head);
+        bar(to - jamb, to, 0, head);
+        bar(from, to, head - 0.05, head);
       }
       cursor = to;
     }
     piece(cursor, seg.end, 0, height);
   }
 
-  // ---- Stairs: a dog-legged flight between each pair of floors, inside the stair cell ----
+  // ---- Stairs: the same dog-leg the 2D plan draws, entered at the foot landing ----
   const stairSteps: Box3D[] = [];
+  const stairRails: Box3D[] = [];
+  const stairFoot: StairFoot = design.stairs?.[0]?.footSide || 'rear';
   const stairCells = cells.filter((cell) => cell.type === 'stair').sort((a, b) => a.floor - b.floor);
   for (const cell of stairCells) {
-    if (cell.floor >= totalFloors - 1) continue;
-    const steps = 16;
-    const rise = STORY_HEIGHT / steps;
-    const landing = Math.min(3.5, cell.rect.d * 0.25);
-    const run = (cell.rect.d - landing) / (steps / 2);
-    const half = cell.rect.w / 2;
-    for (let i = 0; i < steps; i++) {
-      const firstFlight = i < steps / 2;
-      const index = firstFlight ? i : steps - 1 - i;
-      const yFt = cell.rect.y + cell.rect.d - (index + 0.5) * run; // first flight climbs toward the road, second returns
-      const xFt = cell.rect.x + (firstFlight ? half / 2 : half + half / 2);
-      const top = baseY(cell.floor) + (i + 1) * rise;
-      stairSteps.push({ position: [X(xFt), top - rise / 2, Z(yFt)], size: [half * FT * 0.92, rise, run * FT], floorLevel: cell.floor });
+    const stair = planStair(cell.rect, stairFoot);
+    // The well beside the foot landing is guarded on every floor above the ground.
+    if (cell.floor > 0) {
+      stairRails.push({
+        position: [X(cell.rect.x + cell.rect.w / 2), baseY(cell.floor) + 0.5, Z(stairY(cell.rect, stairFoot, stair.footDepth))],
+        size: [cell.rect.w * FT, 1, 0.05],
+        floorLevel: cell.floor
+      });
     }
-    stairSteps.push({
-      position: [X(cell.rect.x + half), baseY(cell.floor) + STORY_HEIGHT / 2 - 0.05, Z(cell.rect.y + landing / 2)],
-      size: [cell.rect.w * FT * 0.96, 0.1, landing * FT],
-      floorLevel: cell.floor
-    });
+    if (cell.floor >= totalFloors - 1) continue;
+    const half = cell.rect.w / 2;
+    const rise = STORY_HEIGHT / (stair.perFlight * 2);
+    const floorY = baseY(cell.floor);
+    const solidStep = (xFt: number, sFt: number, depthFt: number, widthFt: number, topY: number) => {
+      stairSteps.push({
+        position: [X(xFt), floorY + (topY - floorY) / 2, Z(stairY(cell.rect, stairFoot, sFt))],
+        size: [widthFt * FT * 0.96, topY - floorY, depthFt * FT],
+        floorLevel: cell.floor
+      });
+    };
+    for (let i = 0; i < stair.perFlight * 2; i++) {
+      const firstFlight = i < stair.perFlight;
+      const along = firstFlight ? i : stair.perFlight * 2 - 1 - i;
+      solidStep(cell.rect.x + (firstFlight ? half / 2 : half + half / 2), stair.footDepth + (along + 0.5) * stair.tread, stair.tread, half, floorY + (i + 1) * rise);
+    }
+    solidStep(cell.rect.x + half, cell.rect.d - stair.landingDepth / 2, stair.landingDepth, cell.rect.w, floorY + stair.perFlight * rise);
   }
 
   // ---- Railings on balcony / terrace edges, pillars under entrance and car porch ----
-  const railings: Box3D[] = [];
+  const railings: Box3D[] = [...stairRails];
   const pillars: HouseGeometry3D['pillars'] = [];
   for (let floor = 0; floor < totalFloors; floor++) {
     const floorCells = cells.filter((cell) => cell.floor === floor);
@@ -281,6 +328,7 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
     ceilings,
     walls,
     openings,
+    frames,
     stairSteps,
     railings,
     pillars,
@@ -318,10 +366,13 @@ export function checkRenderConsistency(design: StructuredDesignJSON): { consiste
     if (mesh.floorLevel !== (room.position.floorLevel || 0)) problems.push(`${room.name} is on a different floor in 3D.`);
     const widthFt = (room.position.width / 100) * plot.width;
     const depthFt = (room.position.height / 100) * plot.depth;
-    if (Math.abs(mesh.size[0] / FT - widthFt) > 0.05 || Math.abs(mesh.size[2] / FT - depthFt) > 0.05) problems.push(`${room.name} has different dimensions in 2D and 3D.`);
+    // Above the ground floor only the stair's foot landing has a floor: the rest is the well of the flight.
+    const wellOnly = mesh.roomType === 'stair' && mesh.floorLevel > 0;
+    if (Math.abs(mesh.size[0] / FT - widthFt) > 0.05 || (!wellOnly && Math.abs(mesh.size[2] / FT - depthFt) > 0.05)) problems.push(`${room.name} has different dimensions in 2D and 3D.`);
     const cxFt = (room.position.x / 100) * plot.width + widthFt / 2;
     const czFt = (room.position.y / 100) * plot.depth + depthFt / 2;
-    if (Math.abs(mesh.position[0] / FT + plot.width / 2 - cxFt) > 0.05 || Math.abs(mesh.position[2] / FT + plot.depth / 2 - czFt) > 0.05) problems.push(`${room.name} is in a different position in 2D and 3D.`);
+    // The 3D x axis is mirrored (the camera looks from the road), so x is compared as plot.width / 2 - x.
+    if (Math.abs(plot.width / 2 - mesh.position[0] / FT - cxFt) > 0.05 || (!wellOnly && Math.abs(mesh.position[2] / FT + plot.depth / 2 - czFt) > 0.05)) problems.push(`${room.name} is in a different position in 2D and 3D.`);
   }
   if (geometry.summary.bedrooms !== countBedrooms(design)) problems.push(`2D plan has ${countBedrooms(design)} bedrooms but the 3D model has ${geometry.summary.bedrooms}.`);
   const planFloors = new Set(planRooms.map((room) => room.position.floorLevel || 0)).size;

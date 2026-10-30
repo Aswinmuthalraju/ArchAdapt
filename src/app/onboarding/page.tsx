@@ -209,7 +209,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-stone-900">
+    <div className="min-h-screen bg-[#FBF8F4] text-stone-900">
       <Navbar />
 
       <main className="mx-auto max-w-4xl px-6 py-12">
@@ -225,16 +225,16 @@ export default function OnboardingPage() {
               <div
                 key={s.num}
                 onClick={() => s.num < step && setStep(s.num)}
-                className={`flex items-center gap-2 cursor-pointer font-mono text-xs uppercase tracking-wider ${
+                className={`flex items-center gap-2 cursor-pointer text-xs ${
                   step === s.num
-                    ? 'text-stone-900 font-bold border-b-2 border-terracotta-500 pb-1'
+                    ? 'text-stone-900 font-bold border-b-2 border-magenta-500 pb-1'
                     : step > s.num
                     ? 'text-stone-700'
                     : 'text-stone-400'
                 }`}
               >
-                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
-                  step === s.num ? 'bg-stone-900 text-stone-50' : 'bg-stone-200 text-stone-600'
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${
+                  step === s.num ? 'bg-magenta-600 text-white' : 'bg-stone-200 text-stone-600'
                 }`}>
                   {step > s.num ? <Check className="h-3 w-3" /> : s.num}
                 </span>
@@ -248,7 +248,6 @@ export default function OnboardingPage() {
         {step === 1 && (
           <div className="space-y-8 bg-white border border-stone-200 p-8 shadow-sm">
             <div>
-              <span className="font-mono text-xs uppercase tracking-widest text-terracotta-500">STEP 01</span>
               <h2 className="font-serif text-3xl font-normal text-stone-900 mt-1">Plot & Site Information</h2>
               <p className="font-sans text-xs text-stone-600 mt-1">
                 Upload your land document or enter plot dimensions manually with road orientation.
@@ -268,7 +267,7 @@ export default function OnboardingPage() {
             {/* Native Standard HTML Label Upload Zone */}
             <label
               htmlFor="site-plan-upload"
-              className="block border-2 border-dashed border-stone-300 bg-[#F9F8F6] p-8 text-center hover:border-stone-900 transition-colors cursor-pointer relative group"
+              className="block border-2 border-dashed border-stone-300 bg-[#FBF8F4] p-8 text-center hover:border-stone-900 transition-colors cursor-pointer relative group"
             >
               {uploadedFile ? (
                 <div className="flex flex-col items-center justify-center space-y-3">
@@ -279,14 +278,14 @@ export default function OnboardingPage() {
                       className="max-h-32 object-contain border border-stone-300 shadow-sm"
                     />
                   ) : (
-                    <FileText className="h-10 w-10 text-terracotta-500" />
+                    <FileText className="h-10 w-10 text-magenta-500" />
                   )}
                   <div className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-emerald-600" />
-                    <span className="font-mono text-xs uppercase font-bold text-stone-900">
+                    <span className="text-xs font-bold text-stone-900">
                       {uploadedFile.name}
                     </span>
-                    <span className="font-mono text-[10px] text-stone-500">
+                    <span className="text-[11px] text-stone-500">
                       ({uploadedFile.size})
                     </span>
                   </div>
@@ -297,7 +296,7 @@ export default function OnboardingPage() {
                       e.stopPropagation();
                       setUploadedFile(null);
                     }}
-                    className="inline-flex items-center gap-1 font-mono text-[10px] uppercase text-red-600 hover:underline pt-1 z-10"
+                    className="inline-flex items-center gap-1 text-[11px] text-red-600 hover:underline pt-1 z-10"
                   >
                     <X className="h-3 w-3" />
                     Remove & Upload Another File
@@ -306,10 +305,10 @@ export default function OnboardingPage() {
               ) : (
                 <div>
                   <Upload className="mx-auto h-8 w-8 text-stone-400 mb-2 group-hover:text-stone-800 transition-colors" />
-                  <p className="font-sans text-xs font-semibold uppercase text-stone-800">
+                  <p className="font-sans text-xs font-semibold text-stone-800">
                     Upload Site Plan Image / Land Sketch (Optional)
                   </p>
-                  <p className="font-mono text-[10px] text-stone-500 mt-1">
+                  <p className="text-[11px] text-stone-500 mt-1">
                     Click to browse PNG, JPG, PDF up to 10MB
                   </p>
                 </div>
@@ -319,7 +318,7 @@ export default function OnboardingPage() {
             {/* Plot Dimensions Form */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-4 border-t border-stone-200">
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Plot Width (ft)</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Plot Width (ft)</label>
                 <input
                   type="number"
                   value={siteInfo.plotWidth}
@@ -329,7 +328,7 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Plot Depth (ft)</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Plot Depth (ft)</label>
                 <input
                   type="number"
                   value={siteInfo.plotDepth}
@@ -339,7 +338,7 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Road Orientation</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Road Orientation</label>
                 <select
                   value={siteInfo.orientation}
                   onChange={(e) => setSiteInfo({ ...siteInfo, orientation: e.target.value as any })}
@@ -360,7 +359,7 @@ export default function OnboardingPage() {
             <div className="flex justify-end pt-4">
               <button
                 onClick={() => setStep(2)}
-                className="flex items-center gap-2 bg-stone-900 px-8 py-3.5 font-sans text-xs font-semibold uppercase tracking-widest text-stone-50 hover:bg-stone-800 transition-all"
+                className="flex items-center gap-2 btn-gem px-8 py-3.5 text-sm font-semibold text-white transition-all"
               >
                 Next: Location
                 <ArrowRight className="h-4 w-4" />
@@ -373,7 +372,6 @@ export default function OnboardingPage() {
         {step === 2 && (
           <div className="space-y-8 bg-white border border-stone-200 p-8 shadow-sm">
             <div>
-              <span className="font-mono text-xs uppercase tracking-widest text-terracotta-500">STEP 02</span>
               <h2 className="font-serif text-3xl font-normal text-stone-900 mt-1">Property Location</h2>
               <p className="font-sans text-xs text-stone-600 mt-1">
                 Location context provides climate, sun path, and local architectural recommendations.
@@ -382,7 +380,7 @@ export default function OnboardingPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">City / Region</label>
+                <label className="block text-[11px] text-stone-600 mb-1">City / Region</label>
                 <input
                   type="text"
                   value={locationInfo.city}
@@ -392,7 +390,7 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Climate Zone Context</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Climate Zone Context</label>
                 <select
                   value={locationInfo.climateZone}
                   onChange={(e) => setLocationInfo({ ...locationInfo, climateZone: e.target.value as any })}
@@ -407,11 +405,11 @@ export default function OnboardingPage() {
             </div>
 
             <div className="border border-stone-300 bg-arch-grid p-8 text-center flex flex-col items-center justify-center min-h-[180px]">
-              <MapPin className="h-8 w-8 text-terracotta-500 mb-2 animate-bounce" />
-              <span className="font-mono text-xs uppercase font-bold text-stone-900">
+              <MapPin className="h-8 w-8 text-magenta-500 mb-2 animate-bounce" />
+              <span className="text-xs font-bold text-stone-900">
                 {locationInfo.city}, {locationInfo.country}
               </span>
-              <span className="font-mono text-[10px] text-stone-500 mt-1">
+              <span className="text-[11px] text-stone-500 mt-1">
                 Coordinates: {locationInfo.lat}° N, {locationInfo.lng}° E
               </span>
             </div>
@@ -419,14 +417,14 @@ export default function OnboardingPage() {
             <div className="flex justify-between pt-4">
               <button
                 onClick={() => setStep(1)}
-                className="flex items-center gap-2 border border-stone-300 px-6 py-3 font-sans text-xs font-semibold uppercase tracking-widest text-stone-700 hover:border-stone-900"
+                className="flex items-center gap-2 border border-stone-300 px-6 py-3 font-sans text-xs font-semibold text-stone-700 hover:border-stone-900"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </button>
               <button
                 onClick={() => setStep(3)}
-                className="flex items-center gap-2 bg-stone-900 px-8 py-3.5 font-sans text-xs font-semibold uppercase tracking-widest text-stone-50 hover:bg-stone-800 transition-all"
+                className="flex items-center gap-2 btn-gem px-8 py-3.5 text-sm font-semibold text-white transition-all"
               >
                 Next: Requirements
                 <ArrowRight className="h-4 w-4" />
@@ -439,13 +437,12 @@ export default function OnboardingPage() {
         {step === 3 && (
           <div className="space-y-8 bg-white border border-stone-200 p-8 shadow-sm">
             <div>
-              <span className="font-mono text-xs uppercase tracking-widest text-terracotta-500">STEP 03</span>
               <h2 className="font-serif text-3xl font-normal text-stone-900 mt-1">Family & Spatial Requirements</h2>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Bedrooms</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Bedrooms</label>
                 <input
                   type="number"
                   min="1"
@@ -457,7 +454,7 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Bathrooms</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Bathrooms</label>
                 <input
                   type="number"
                   min="1"
@@ -469,7 +466,7 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Floors</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Floors</label>
                 <input
                   type="number"
                   min="1"
@@ -481,7 +478,7 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Budget Tier</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Budget Tier</label>
                 <select
                   value={requirements.budgetRange}
                   onChange={(e) => setRequirements({ ...requirements, budgetRange: e.target.value as any })}
@@ -496,7 +493,7 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] uppercase text-stone-600 mb-2 font-bold">Spaces the house must include</label>
+              <label className="block text-[11px] text-stone-600 mb-2 font-bold">Spaces the house must include</label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {([
                   ['dining', 'Dining Room'],
@@ -514,11 +511,11 @@ export default function OnboardingPage() {
                       key={key}
                       type="button"
                       onClick={() => setRequirements({ ...requirements, spaces: { ...requirements.spaces, [key]: !active } })}
-                      className={`flex items-center gap-2 px-3 py-2.5 border text-xs font-mono uppercase tracking-wider text-left transition-all ${
-                        active ? 'border-terracotta-500 bg-amber-50/40 text-stone-900 font-bold' : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'
+                      className={`flex items-center gap-2 px-3 py-2.5 border text-xs text-left transition-all ${
+                        active ? 'border-magenta-500 bg-amber-50/40 text-stone-900 font-bold' : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'
                       }`}
                     >
-                      <span className={`flex h-3.5 w-3.5 items-center justify-center border ${active ? 'border-terracotta-500 bg-terracotta-500 text-white' : 'border-stone-400'}`}>
+                      <span className={`flex h-3.5 w-3.5 items-center justify-center border ${active ? 'border-magenta-500 bg-magenta-500 text-white' : 'border-stone-400'}`}>
                         {active && <Check className="h-2.5 w-2.5" />}
                       </span>
                       {label}
@@ -533,7 +530,7 @@ export default function OnboardingPage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Car Parking</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Car Parking</label>
                 <input
                   type="number"
                   min="0"
@@ -544,7 +541,7 @@ export default function OnboardingPage() {
                 />
               </div>
               <div>
-                <label className="block font-mono text-[10px] uppercase text-stone-600 mb-1">Family Size</label>
+                <label className="block text-[11px] text-stone-600 mb-1">Family Size</label>
                 <input
                   type="number"
                   min="1"
@@ -557,7 +554,7 @@ export default function OnboardingPage() {
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] uppercase text-stone-600 mb-2 font-bold">Preferences in your own words (optional)</label>
+              <label className="block text-[11px] text-stone-600 mb-2 font-bold">Preferences in your own words (optional)</label>
               <textarea
                 rows={2}
                 value={requirements.customRequirements}
@@ -570,14 +567,14 @@ export default function OnboardingPage() {
             <div className="flex justify-between pt-4">
               <button
                 onClick={() => setStep(2)}
-                className="flex items-center gap-2 border border-stone-300 px-6 py-3 font-sans text-xs font-semibold uppercase tracking-widest text-stone-700 hover:border-stone-900"
+                className="flex items-center gap-2 border border-stone-300 px-6 py-3 font-sans text-xs font-semibold text-stone-700 hover:border-stone-900"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back
               </button>
               <button
                 onClick={() => setStep(4)}
-                className="flex items-center gap-2 bg-stone-900 px-8 py-3.5 font-sans text-xs font-semibold uppercase tracking-widest text-stone-50 hover:bg-stone-800 transition-all"
+                className="flex items-center gap-2 btn-gem px-8 py-3.5 text-sm font-semibold text-white transition-all"
               >
                 Next: Modes & Style
                 <ArrowRight className="h-4 w-4" />
@@ -590,13 +587,12 @@ export default function OnboardingPage() {
         {step === 4 && (
           <div className="space-y-8 bg-white border border-stone-200 p-8 shadow-sm">
             <div>
-              <span className="font-mono text-xs uppercase tracking-widest text-terracotta-500">STEP 04</span>
               <h2 className="font-serif text-3xl font-normal text-stone-900 mt-1">Design Modes & Architectural Style</h2>
             </div>
 
             {/* Special Modes */}
             <div>
-              <label className="block font-mono text-[10px] uppercase text-stone-600 mb-3 font-bold">Special Architectural Modes</label>
+              <label className="block text-[11px] text-stone-600 mb-3 font-bold">Special Architectural Modes</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[
                   { id: 'climate_adaptive', title: 'Climate-Adaptive', icon: Wind, desc: 'Optimizes passive ventilation & shading.' },
@@ -610,10 +606,10 @@ export default function OnboardingPage() {
                       key={m.id}
                       onClick={() => toggleMode(m.id as SpecialMode)}
                       className={`p-4 border cursor-pointer transition-all flex items-start gap-3 ${
-                        active ? 'border-terracotta-500 bg-amber-50/40' : 'border-stone-300 hover:border-stone-900'
+                        active ? 'border-magenta-500 bg-amber-50/40' : 'border-stone-300 hover:border-stone-900'
                       }`}
                     >
-                      <m.icon className={`h-5 w-5 mt-0.5 ${active ? 'text-terracotta-500' : 'text-stone-500'}`} />
+                      <m.icon className={`h-5 w-5 mt-0.5 ${active ? 'text-magenta-500' : 'text-stone-500'}`} />
                       <div>
                         <h4 className="font-serif text-base font-medium text-stone-900">{m.title}</h4>
                         <p className="font-sans text-xs text-stone-600 mt-0.5">{m.desc}</p>
@@ -626,7 +622,7 @@ export default function OnboardingPage() {
 
             {/* Architectural Style */}
             <div>
-              <label className="block font-mono text-[10px] uppercase text-stone-600 mb-3 font-bold">Primary Architectural Style</label>
+              <label className="block text-[11px] text-stone-600 mb-3 font-bold">Primary Architectural Style</label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   'Kerala Traditional',
@@ -642,9 +638,9 @@ export default function OnboardingPage() {
                     key={style}
                     type="button"
                     onClick={() => setPrimaryStyle(style as ArchitecturalStyle)}
-                    className={`px-4 py-3 border text-xs font-mono uppercase tracking-wider text-center transition-all ${
+                    className={`px-4 py-3 border text-xs text-center transition-all ${
                       primaryStyle === style
-                        ? 'border-stone-900 bg-stone-900 text-stone-50 font-bold'
+                        ? 'border-plum-900 bg-plum-900 text-gold-200 font-semibold'
                         : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'
                     }`}
                   >
@@ -656,9 +652,9 @@ export default function OnboardingPage() {
 
             {/* Loading Indicator */}
             {isGenerating && (
-              <div className="p-6 border border-stone-300 bg-stone-900 text-stone-50 text-center space-y-3">
-                <Sparkles className="mx-auto h-6 w-6 text-terracotta-400 animate-spin" />
-                <p className="font-mono text-xs tracking-widest uppercase text-terracotta-400 font-bold">
+              <div className="p-6 border border-stone-300 bg-plum-900 text-stone-50 text-center space-y-3">
+                <Sparkles className="mx-auto h-6 w-6 text-magenta-400 animate-spin" />
+                <p className="text-xs text-magenta-400 font-bold">
                   {loadingStage}
                 </p>
                 <p className="font-sans text-xs text-stone-400">
@@ -670,7 +666,7 @@ export default function OnboardingPage() {
             {/* Error Message & Recovery */}
             {generationError && !isGenerating && (
               <div className="p-5 border border-red-300 bg-red-50 space-y-3">
-                <p className="font-mono text-xs uppercase tracking-wider text-red-700 font-bold text-center">
+                <p className="text-xs text-red-700 font-bold text-center">
                   {generationError.title}
                 </p>
                 <p className="font-sans text-xs text-red-700 text-center">{generationError.message}</p>
@@ -690,7 +686,7 @@ export default function OnboardingPage() {
                   {generationError.canRetry && (
                     <button
                       onClick={() => handleGenerate('auto')}
-                      className="inline-flex items-center gap-2 bg-stone-900 px-6 py-2.5 font-mono text-xs uppercase tracking-widest text-stone-50 hover:bg-stone-800 transition-all"
+                      className="inline-flex items-center gap-2 btn-gem px-6 py-2.5 text-sm font-semibold text-white transition-all"
                     >
                       <RefreshCw className="h-3 w-3" />
                       Retry
@@ -699,7 +695,7 @@ export default function OnboardingPage() {
                   {generationError.canUseLocalEngine && (
                     <button
                       onClick={() => handleGenerate('local')}
-                      className="inline-flex items-center gap-2 border border-stone-900 px-6 py-2.5 font-mono text-xs uppercase tracking-widest text-stone-900 hover:bg-stone-100 transition-all"
+                      className="inline-flex items-center gap-2 border border-stone-900 px-6 py-2.5 text-xs text-stone-900 hover:bg-stone-100 transition-all"
                     >
                       Use the built-in rule engine instead
                     </button>
@@ -711,7 +707,7 @@ export default function OnboardingPage() {
             <div className="flex justify-between pt-6 border-t border-stone-200">
               <button
                 onClick={() => setStep(3)}
-                className="flex items-center gap-2 border border-stone-300 px-6 py-3 font-sans text-xs font-semibold uppercase tracking-widest text-stone-700 hover:border-stone-900"
+                className="flex items-center gap-2 border border-stone-300 px-6 py-3 font-sans text-xs font-semibold text-stone-700 hover:border-stone-900"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back
@@ -719,7 +715,7 @@ export default function OnboardingPage() {
               <button
                 onClick={() => handleGenerate("auto")}
                 disabled={isGenerating}
-                className="flex items-center gap-3 bg-terracotta-500 px-10 py-4 font-sans text-xs font-semibold uppercase tracking-widest text-white hover:bg-terracotta-600 transition-all shadow-md"
+                className="flex items-center gap-3 bg-magenta-500 px-10 py-4 font-sans text-xs font-semibold text-white hover:bg-magenta-600 transition-all shadow-md"
               >
                 {isGenerating ? 'Generating…' : 'Generate Design'}
                 <ArrowRight className="h-4 w-4" />

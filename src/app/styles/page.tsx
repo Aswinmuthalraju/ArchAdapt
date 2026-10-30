@@ -1,10 +1,11 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
-import Navbar from '@/components/navigation/Navbar';
-import { Palette, ArrowRight, Layers, Sparkles, CheckCircle2 } from 'lucide-react';
+import MotionPage from '@/components/marketing/site/MotionPage';
+import Blossom from '@/components/motion/Blossom';
+import CircleButton from '@/components/motion/CircleButton';
+import SplitText from '@/components/motion/SplitText';
 
 export default function ArchitecturalStylesPage() {
   const stylesList = [
@@ -107,112 +108,48 @@ export default function ArchitecturalStylesPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-stone-900 selection:bg-terracotta-500 selection:text-white">
-      <Navbar />
-
-      {/* Header Banner */}
-      <section className="border-b border-stone-200 py-16 lg:py-24 bg-[#F4F2EC]/60">
-        <div className="mx-auto max-w-7xl px-6 lg:px-12">
-          <div className="max-w-3xl space-y-4">
-            <span className="font-mono text-xs uppercase tracking-widest text-terracotta-500 font-semibold">
-              Supported Architectural Styles
-            </span>
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-stone-950 leading-tight">
-              Architectural Styles & Expressions
-            </h1>
-            <p className="font-sans text-base text-stone-600 leading-relaxed max-w-2xl">
-              ArchAdapt AI supports a curated library of architectural styles. Each style dynamically alters spatial layout strategies, roof profiles, verandah placements, and opening proportions.
-            </p>
-          </div>
-        </div>
+    <MotionPage>
+      <section className="page-hero" data-section="Styles" data-header="ink">
+        <Blossom branch="c" side="right" className="blossom--page" speed={-20} />
+        <p className="label label--rule">Supported Architectural Styles</p>
+        <h1 className="display display--sm" data-stretch><SplitText text={'Architectural Styles\n& Expressions'} /></h1>
+        <p className="body" data-fade>
+          ArchAdapt AI supports a curated library of architectural styles. Each style dynamically alters spatial layout strategies, roof profiles, verandah placements, and opening proportions.
+        </p>
       </section>
 
-      {/* Style Synthesis Concept Callout */}
-      <section className="border-b border-stone-200 bg-white py-12">
-        <div className="mx-auto max-w-7xl px-6 lg:px-12">
-          <div className="border border-stone-300 bg-[#F9F8F6] p-8 lg:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-2xl">
-              <div className="flex items-center gap-2 font-mono text-xs uppercase text-terracotta-500 font-semibold">
-                <Sparkles className="h-4 w-4" />
-                <span>Multi-Style Synthesis</span>
-              </div>
-              <h3 className="font-serif text-2xl font-medium text-stone-950">
-                Combine Styles for Unique Hybrid Concepts (e.g. "Kerala + Modern")
-              </h3>
-              <p className="font-sans text-xs text-stone-600 leading-relaxed">
-                You can select a primary style (e.g. <span className="font-semibold text-stone-900">Kerala Traditional</span>) and secondary style (e.g. <span className="font-semibold text-stone-900">Modern</span>). The engine combines compatible characteristics: traditional Nadumuttam courtyards and sloped terracotta gables with crisp floor-to-ceiling glass sliders.
-              </p>
-            </div>
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center gap-2 bg-stone-900 px-6 py-3 font-sans text-xs font-semibold uppercase tracking-widest text-stone-50 hover:bg-stone-800 transition-all shrink-0"
-            >
-              Try Hybrid Styles
-              <ArrowRight className="h-4 w-4 text-terracotta-400" />
-            </Link>
-          </div>
+      <section className="page-callout" data-section="Hybrids" data-bg="sky" data-header="ink">
+        <div>
+          <p className="label">Your architectural direction</p>
+          <h2 className="callout-title" data-stretch><SplitText text={'Combine Styles for Unique Hybrid Concepts (e.g. "Kerala + Modern")'} /></h2>
+          <p className="body" data-fade>
+            You can select a primary style (e.g. <strong>Kerala Traditional</strong>) and secondary style (e.g. <strong>Modern</strong>). The engine combines compatible characteristics: traditional Nadumuttam courtyards and sloped terracotta gables with crisp floor-to-ceiling glass sliders.
+          </p>
         </div>
+        <CircleButton href="/onboarding" label="Try it" ring="Try Hybrid Styles · " />
       </section>
 
-      {/* Styles Grid */}
-      <section className="py-20 mx-auto max-w-7xl px-6 lg:px-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+      <section className="page-list" data-section="Library" data-bg="ivory" data-header="ink">
+        <div className="card-grid">
           {stylesList.map((st, idx) => (
-            <div key={idx} className="border border-stone-300 bg-white overflow-hidden group hover:border-stone-900 transition-all flex flex-col justify-between">
-              <div>
-                <div className="relative aspect-[16/9] w-full overflow-hidden bg-stone-100">
-                  <Image
-                    src={st.img}
-                    alt={st.name}
-                    fill
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-stone-950/60 via-transparent to-transparent"></div>
-                  <div className="absolute bottom-4 left-6 right-6 text-white font-serif text-2xl font-medium">
-                    {st.name}
-                  </div>
-                </div>
-
-                <div className="p-8 space-y-6">
-                  <p className="font-mono text-xs uppercase tracking-wider text-terracotta-500 font-semibold">
-                    {st.tagline}
-                  </p>
-
-                  <div className="space-y-2">
-                    <div className="font-mono text-[10px] uppercase font-bold text-stone-400">Architectural Characteristics</div>
-                    {st.characteristics.map((c, cIdx) => (
-                      <div key={cIdx} className="flex items-center gap-2.5 font-sans text-xs text-stone-700">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-stone-900 shrink-0" />
-                        <span>{c}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="pt-4 border-t border-stone-100">
-                    <div className="font-mono text-[10px] uppercase font-bold text-stone-400">Spatial Layout Impact</div>
-                    <p className="font-sans text-xs text-stone-600 leading-relaxed mt-1 italic">
-                      "{st.spatialImpact}"
-                    </p>
-                  </div>
+            <article key={st.name} className="style-card">
+              <div className="style-card-media" data-curtain data-cursor="View">
+                <div className="style-card-img" data-curtain-img>
+                  <Image src={st.img} alt={st.name} fill sizes="(max-width: 899px) 100vw, 45vw" quality={70} />
                 </div>
               </div>
-            </div>
+              <div className="style-card-body" data-fade>
+                <p className="label">{String(idx + 1).padStart(2, '0')} · {st.tagline}</p>
+                <h2 className="row-title">{st.name}</h2>
+                <p className="label label--muted">Architectural Characteristics</p>
+                <ul className="dash-list">{st.characteristics.map((c) => <li key={c}>{c}</li>)}</ul>
+                <p className="label label--muted">Spatial Layout Impact</p>
+                <p className="body quote">“{st.spatialImpact}”</p>
+              </div>
+            </article>
           ))}
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="border-t border-stone-800 bg-stone-950 text-stone-400 py-12">
-        <div className="mx-auto max-w-7xl px-6 lg:px-12 flex flex-col md:flex-row items-center justify-between gap-6 font-mono text-xs text-stone-500">
-          <div>© 2026 ArchAdapt AI Studio • Core Generative Architectural Engine</div>
-          <div className="flex items-center gap-6">
-            <Link href="/how-it-works" className="hover:text-stone-300">How It Works</Link>
-            <Link href="/styles" className="hover:text-stone-300">Styles</Link>
-            <Link href="/modes" className="hover:text-stone-300">Modes</Link>
-            <Link href="/dashboard" className="hover:text-stone-300">Dashboard</Link>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </MotionPage>
   );
 }

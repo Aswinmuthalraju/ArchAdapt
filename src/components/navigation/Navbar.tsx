@@ -3,44 +3,36 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Compass, LogOut, FolderKanban, Plus } from 'lucide-react';
+import { LogOut, FolderKanban, Menu, X } from 'lucide-react';
 import AuthModal from '@/components/auth/AuthModal';
+import { LogoMark, Wordmark } from '@/components/brand/Logo';
 import { supabase } from '@/lib/supabase/client';
 
-export default function Navbar() {
+const NAV_ITEMS = [
+  { name: 'How it works', href: '/how-it-works' },
+  { name: 'Styles', href: '/styles' },
+  { name: 'Design modes', href: '/modes' }
+];
+
+export default function Navbar({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string; avatarUrl?: string } | null>(null);
+  const dark = tone === 'dark';
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Architect',
-          email: session.user.email || '',
-          avatarUrl: session.user.user_metadata?.avatar_url
-        });
-      }
-    });
+    const toUser = (session: { user?: { user_metadata?: Record<string, string>; email?: string } } | null) =>
+      session?.user
+        ? { name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Architect', email: session.user.email || '', avatarUrl: session.user.user_metadata?.avatar_url }
+        : null;
 
-    // Listen for auth state changes
+    supabase.auth.getSession().then(({ data: { session } }) => setUser(toUser(session)));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setUser({
-          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Architect',
-          email: session.user.email || '',
-          avatarUrl: session.user.user_metadata?.avatar_url
-        });
-      } else {
-        setUser(null);
-        if (event === 'SIGNED_OUT' && (pathname === '/dashboard' || pathname?.startsWith('/workspace'))) {
-          router.replace('/login');
-        }
-      }
+      setUser(toUser(session));
+      if (!session?.user && event === 'SIGNED_OUT' && (pathname === '/dashboard' || pathname?.startsWith('/workspace'))) router.replace('/login');
     });
-
     return () => subscription.unsubscribe();
   }, [pathname, router]);
 
@@ -50,99 +42,71 @@ export default function Navbar() {
     router.replace('/login');
   };
 
-  const navItems = [
-    { name: 'How It Works', href: '/how-it-works' },
-    { name: 'Architectural Styles', href: '/styles' },
-    { name: 'Special Modes', href: '/modes' },
-    { name: 'My Projects', href: '/dashboard', icon: FolderKanban }
-  ];
+  const link = (active: boolean) =>
+    `relative py-1 text-[0.95rem] transition-colors ${dark ? (active ? 'text-gold-300' : 'text-stone-300 hover:text-gold-200') : active ? 'text-magenta-600' : 'text-stone-600 hover:text-stone-900'}`;
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full border-b border-stone-200 bg-[#F9F8F6]/90 backdrop-blur-md transition-all">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6 lg:px-12">
-          {/* Logo Brand Mark */}
-          <Link href="/" className="group flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center bg-stone-900 text-stone-50 transition-transform group-hover:scale-105">
-              <Compass className="h-5 w-5 stroke-[1.5]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-serif text-xl font-medium tracking-tight text-stone-900">
-                ARCHADAPT<span className="font-mono text-xs text-terracotta-500 ml-1">AI</span>
-              </span>
-              <span className="font-mono text-[9px] uppercase tracking-widest text-stone-500">
-                Architectural Studio Engine
-              </span>
-            </div>
+      <header className={`sticky top-0 z-40 w-full border-b backdrop-blur-md ${dark ? 'border-gold-400/20 bg-plum-900/80' : 'border-stone-200 bg-stone-50/85'}`}>
+        <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center justify-between px-5 lg:px-10">
+          <Link href="/" className="flex items-center gap-3" aria-label="ArchAdapt AI home">
+            <LogoMark />
+            <Wordmark tone={dark ? 'dark' : 'light'} />
           </Link>
 
-          {/* Center Quiet Navigation Links */}
-          <nav className="hidden md:flex items-center gap-8 font-sans text-xs font-semibold tracking-widest uppercase text-stone-600">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-1.5 py-1 border-b-2 transition-all ${
-                    isActive
-                      ? 'border-terracotta-500 text-stone-950 font-bold'
-                      : 'border-transparent text-stone-600 hover:text-stone-900 hover:border-stone-300'
-                  }`}
-                >
-                  {Icon && <Icon className="h-3.5 w-3.5 text-terracotta-500" />}
-                  {item.name}
-                </Link>
-              );
-            })}
+          <nav className="hidden items-center gap-9 md:flex" aria-label="Main">
+            {NAV_ITEMS.map((item) => (
+              <Link key={item.href} href={item.href} className={link(pathname === item.href)} aria-current={pathname === item.href ? 'page' : undefined}>
+                {item.name}
+                {pathname === item.href && <span className="absolute -bottom-1 left-0 h-px w-full bg-gold-400" />}
+              </Link>
+            ))}
           </nav>
 
-          {/* Right Action Buttons */}
-          <div className="flex items-center gap-4">
+          <div className="hidden items-center gap-3 md:flex">
             {user ? (
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/dashboard"
-                  className={`hidden sm:flex items-center gap-2 px-4 py-2.5 font-mono text-xs uppercase tracking-wider transition-all border ${
-                    pathname === '/dashboard'
-                      ? 'bg-stone-900 text-stone-50 border-stone-900 font-bold'
-                      : 'border-stone-900 text-stone-900 hover:bg-stone-900 hover:text-stone-50'
-                  }`}
-                >
-                  <FolderKanban className="h-3.5 w-3.5" />
-                  Dashboard
+              <>
+                <Link href="/dashboard" className={`flex h-10 items-center gap-2 px-4 text-sm font-medium transition-colors ${dark ? 'border border-gold-400/50 text-gold-200 hover:bg-gold-400/10' : 'border border-stone-900 text-stone-900 hover:bg-stone-900 hover:text-gold-200'}`}>
+                  <FolderKanban className="h-4 w-4" />
+                  My projects
                 </Link>
-                <button
-                  onClick={handleSignOut}
-                  className="flex h-9 w-9 items-center justify-center border border-stone-200 text-stone-600 hover:border-stone-900 hover:text-stone-900 transition-all"
-                  title="Sign Out"
-                >
+                <button onClick={handleSignOut} className={`flex h-10 w-10 items-center justify-center border transition-colors ${dark ? 'border-plum-600 text-stone-300 hover:border-gold-400 hover:text-gold-200' : 'border-stone-300 text-stone-600 hover:border-stone-900 hover:text-stone-900'}`} title="Sign out" aria-label="Sign out">
                   <LogOut className="h-4 w-4" />
                 </button>
-              </div>
+              </>
             ) : (
-              <div className="flex items-center gap-3">
-                <Link
-                  href="/login"
-                  className="hidden sm:inline-block font-sans text-xs font-semibold uppercase tracking-widest text-stone-700 hover:text-stone-900 px-3 py-2"
-                >
-                  Sign In
+              <>
+                <Link href="/login" className={`px-3 py-2 text-[0.95rem] font-medium ${dark ? 'text-stone-200 hover:text-gold-200' : 'text-stone-700 hover:text-stone-900'}`}>
+                  Sign in
                 </Link>
-                <Link
-                  href="/onboarding"
-                  className="flex items-center gap-2 bg-stone-900 px-6 py-3 font-sans text-xs font-semibold uppercase tracking-widest text-stone-50 hover:bg-stone-800 transition-all shadow-sm"
-                >
-                  <Plus className="h-4 w-4 text-terracotta-400" />
-                  Start Designing
+                <Link href="/onboarding" className="btn-gem inline-flex h-10 items-center px-5 text-sm font-semibold text-white transition-transform active:scale-[0.98]">
+                  Start a plan
                 </Link>
-              </div>
+              </>
             )}
           </div>
+
+          <button className={`flex h-10 w-10 items-center justify-center md:hidden ${dark ? 'text-stone-100' : 'text-stone-900'}`} onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-label="Menu">
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
+
+        {open && (
+          <div className={`border-t px-5 pb-5 pt-3 md:hidden ${dark ? 'border-gold-400/20 bg-plum-900' : 'border-stone-200 bg-stone-50'}`}>
+            <nav className="flex flex-col" aria-label="Mobile">
+              {[...NAV_ITEMS, ...(user ? [{ name: 'My projects', href: '/dashboard' }] : [{ name: 'Sign in', href: '/login' }])].map((item) => (
+                <Link key={item.href} href={item.href} onClick={() => setOpen(false)} className={`border-b py-3 text-base ${dark ? 'border-plum-700 text-stone-100' : 'border-stone-200 text-stone-800'}`}>
+                  {item.name}
+                </Link>
+              ))}
+            </nav>
+            <Link href="/onboarding" onClick={() => setOpen(false)} className="btn-gem mt-4 flex h-12 items-center justify-center text-sm font-semibold text-white">
+              Start a plan
+            </Link>
+          </div>
+        )}
       </header>
 
-      {/* Auth Modal */}
       <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onAuthSuccess={(u) => setUser(u)} />
     </>
   );

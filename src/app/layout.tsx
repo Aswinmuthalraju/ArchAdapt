@@ -1,36 +1,22 @@
 import type { Metadata } from 'next';
-import { Playfair_Display, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
+import { Bodoni_Moda, Jost, Pinyon_Script } from 'next/font/google';
 import './globals.css';
 
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  variable: '--font-serif',
-  display: 'swap',
-});
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  variable: '--font-sans',
-  display: 'swap',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
-  display: 'swap',
-});
+const sans = Jost({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
+const display = Bodoni_Moda({ subsets: ['latin'], variable: '--font-serif', display: 'swap', adjustFontFallback: false });
+const script = Pinyon_Script({ subsets: ['latin'], weight: '400', variable: '--font-script', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'ArchAdapt AI — Core Generative Architectural Studio',
+  title: 'ArchAdapt AI — House plans that fit your plot and your family',
   description:
-    'Conversational GenAI architectural studio helping users design and adapt conceptual house floor plans based on site constraints, location, family needs, and architectural styles.',
+    'Describe your plot, your family and your climate. ArchAdapt AI drafts a checked floor plan and a matching 3D model, then reshapes both as you ask for changes.',
   keywords: [
-    'Architecture AI',
-    'Conceptual Floor Plan Generator',
-    'Kerala Traditional House Plans',
-    '3D Massing Visualization',
-    'Generative Spatial Planner'
-  ]
+    'house plan generator',
+    'floor plan AI',
+    'Kerala house plans',
+    '3D house model',
+    'plot planning',
+  ],
 };
 
 export default function RootLayout({
@@ -39,10 +25,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${plusJakarta.variable} ${playfair.variable} ${jetbrainsMono.variable} scroll-smooth`}>
-      <body className="font-sans bg-[#F9F8F6] text-stone-900 antialiased selection:bg-terracotta-500 selection:text-white">
-        {children}
-      </body>
+    <html lang="en" className={`${sans.variable} ${display.variable} ${script.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Lets CSS hold intro states before hydration, so animated elements never flash. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
+      </head>
+      <body className="font-sans bg-ivory text-ink antialiased">{children}</body>
     </html>
   );
 }

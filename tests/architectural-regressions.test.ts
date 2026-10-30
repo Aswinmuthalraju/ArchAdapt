@@ -47,18 +47,18 @@ const bedroomsOnFloor = (design: StructuredDesignJSON, level: number) =>
   design.rooms.filter((room) => (room.roomType === 'bedroom' || room.roomType === 'master_bedroom') && room.position.floorLevel === level).length;
 
 // The suite must never reach the real Gemini API or depend on a developer's key.
-const savedEnv = { key: process.env.GENAI_API_KEY, alt: process.env.GEMINI_API_KEY, fallback: process.env.ALLOW_ARCHADAPT_FALLBACK };
+const savedEnv = { key: process.env.GENAI_API_KEY, alt: process.env.GEMINI_API_KEY, fallback: process.env.ARCHADAPT_STRICT_AI };
 const realFetch = globalThis.fetch;
 beforeEach(() => {
   delete process.env.GENAI_API_KEY;
   delete process.env.GEMINI_API_KEY;
-  delete process.env.ALLOW_ARCHADAPT_FALLBACK;
+  process.env.ARCHADAPT_STRICT_AI = 'true'; // tests opt in to the automatic takeover
 });
 afterEach(() => {
   globalThis.fetch = realFetch;
   if (savedEnv.key) process.env.GENAI_API_KEY = savedEnv.key;
   if (savedEnv.alt) process.env.GEMINI_API_KEY = savedEnv.alt;
-  if (savedEnv.fallback) process.env.ALLOW_ARCHADAPT_FALLBACK = savedEnv.fallback;
+  if (savedEnv.fallback === undefined) delete process.env.ARCHADAPT_STRICT_AI; else process.env.ARCHADAPT_STRICT_AI = savedEnv.fallback;
 });
 
 function mockGemini(responses: (object | number)[]) {
@@ -439,7 +439,7 @@ test('an invalid Gemini answer is retried once with the validation errors as fee
 
 test('two invalid Gemini answers end in a clear failure: no third attempt and no silent template', async () => {
   process.env.GENAI_API_KEY = 'test-key';
-  process.env.ALLOW_ARCHADAPT_FALLBACK = 'true'; // even with the local engine allowed, an INVALID design is not swapped out
+  // strict mode: an INVALID design is never swapped out
   const twoBedrooms = { ...validGeminiProgram, rooms: validGeminiProgram.rooms.filter((room) => room.id !== 'bed-2') };
   const mock = mockGemini([twoBedrooms, { rooms: 'nonsense' }, validGeminiProgram]);
   const outcome = await generateDesign(brief(3, 2, 2));
@@ -457,7 +457,7 @@ test('when Gemini is unreachable the outcome says so; the local engine is used o
   const blocked = await generateDesign(brief(3, 2, 2));
   assert.equal(blocked.status, 'ENGINE_UNAVAILABLE');
 
-  process.env.ALLOW_ARCHADAPT_FALLBACK = 'true';
+  delete process.env.ARCHADAPT_STRICT_AI;
   mockGemini([404]);
   const allowed = await generateDesign(brief(3, 2, 2));
   assert.equal(allowed.status, 'OK');
@@ -501,4 +501,89 @@ test('if the AI planner declines to produce a change, a plainly worded request s
   const outcome = await runWhatIf(original, 'Add 12 more bedrooms on the ground floor');
   assert.equal(outcome.status, 'INFEASIBLE', JSON.stringify(outcome).slice(0, 300));
   if (outcome.status === 'INFEASIBLE') assert.match(outcome.reason, /cannot fit/i);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Doors, stairs and 3D handedness
+// ---------------------------------------------------------------------------------------------
+
+const stairCellOf = (design: StructuredDesignJSON, floor: number) => {
+  const plot = design.plot!;
+  const room = design.rooms.find((r) => r.roomType === 'stair' && r.position.floorLevel === floor)!;
+  return { x: (room.position.x / 100) * plot.width, y: (room.position.y / 100) * plot.depth, w: (room.position.width / 100) * plot.width, d: (room.position.height / 100) * plot.depth, id: room.id };
+};
+
+test('doors and archways open into a stair only at its foot landing, never across the flights', async () => {
+  for (const args of [[3, 2, 2], [4, 2, 3], [3, 3, 3], [2, 2, 2]] as [number, number, number][]) {
+    const design = await generate(...args);
+    const foot = design.stairs![0].footSide;
+    assert.ok(foot === 'front' || foot === 'rear', 'the stair records which end it is entered from');
+    for (const op of design.openings.filter((o) => o.type !== 'window' && (o.connects || []).length === 2)) {
+      const stair = stairCellOf(design, op.floorLevel || 0);
+      if (!op.connects!.includes(stair.id)) continue;
+      const y = (op.y / 100) * design.plot!.depth;
+      const footAt = foot === 'front' ? stair.y : stair.y + stair.d;
+      const nearFoot = Math.abs(y - footAt) < 0.1 || (foot === 'front' ? y <= stair.y + 3.6 : y >= stair.y + stair.d - 3.6);
+      assert.ok(nearFoot, `${op.label} sits at y=${y} outside the foot landing of the stair`);
+    }
+  }
+});
+
+test('no two openings overlap on a wall, and every door has a hinge and swings into a room', async () => {
+  for (const args of [[3, 2, 2], [4, 2, 3], [2, 1, 2]] as [number, number, number][]) {
+    const design = await generate(...args);
+    const validation = validateFloorPlan(design);
+    assert.ok(!validation.issues.some((issue) => issue.code === 'OPENING_OVERLAP' || issue.code === 'STAIR_DOOR'), validation.errors.join('; '));
+    for (const door of design.openings.filter((o) => o.type === 'door')) {
+      assert.ok(door.hinge === 'start' || door.hinge === 'end', `${door.label} has no hinge`);
+      assert.ok(door.swingSide === 1 || door.swingSide === -1, `${door.label} has no swing side`);
+    }
+  }
+});
+
+test('the 3D model is not mirrored relative to the 2D plan', async () => {
+  const design = await generate(3, 2, 2);
+  const geometry = buildHouseGeometry(design);
+  const plot = design.plot!;
+  const car = design.rooms.find((r) => r.roomType === 'parking')!;
+  const living = design.rooms.find((r) => r.roomType === 'living')!;
+  const cx = (r: typeof car) => r.position.x + r.position.width / 2;
+  const meshX = (id: string) => geometry.rooms.find((m) => m.id === id)!.position[0];
+  // Seen from the road (the camera at -Z), a room further along plan x appears further to the viewer's right, which is -X in world space.
+  assert.equal(Math.sign(cx(car) - cx(living)), Math.sign(meshX(living.id) - meshX(car.id)));
+  assert.ok(plot.width > 0);
+});
+
+test('auto mode: two invalid Gemini answers hand over to the validated rule engine with a visible notice', async () => {
+  process.env.GENAI_API_KEY = 'test-key';
+  delete process.env.ARCHADAPT_STRICT_AI;
+  mockGemini([{ rooms: 'nonsense' }]);
+  const outcome = await generateDesign(brief(3, 2, 2));
+  assert.equal(outcome.status, 'OK');
+  if (outcome.status === 'OK') {
+    assert.equal(outcome.engine, 'local-rule-engine');
+    assert.match(outcome.notice || '', /built-in rule engine/i);
+    assert.equal(validateFloorPlan(outcome.design).isValid, true);
+    assert.equal(countBedrooms(outcome.design), 3);
+  }
+});
+
+test('when one Gemini key is rate limited the next key is used, in order, without surfacing an error', async () => {
+  const saved = { a: process.env.GENAI_API_KEY, b: process.env.GENAI_API_KEY_2, c: process.env.GENAI_API_KEY_3 };
+  process.env.GENAI_API_KEY = 'key-one'; process.env.GENAI_API_KEY_2 = 'key-two'; process.env.GENAI_API_KEY_3 = 'key-three';
+  const used: string[] = [];
+  globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+    const key = (init?.headers as Record<string, string>)['x-goog-api-key'];
+    used.push(key);
+    if (key !== 'key-three') return new Response(JSON.stringify({ error: { message: 'quota' } }), { status: 429 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(validGeminiProgram) }] } }] }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const outcome = await generateDesign(brief(3, 2, 2));
+    assert.equal(outcome.status, 'OK');
+    if (outcome.status === 'OK') assert.equal(outcome.engine, 'gemini');
+    assert.deepEqual(used.slice(0, 3), ['key-one', 'key-two', 'key-three']);
+  } finally {
+    for (const [k, v] of [['GENAI_API_KEY', saved.a], ['GENAI_API_KEY_2', saved.b], ['GENAI_API_KEY_3', saved.c]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
 });

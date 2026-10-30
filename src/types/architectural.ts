@@ -202,6 +202,10 @@ export interface FloorPlanOpening {
   width: number; // feet
   label?: string;
   swingDirection?: 'inward_left' | 'inward_right' | 'outward' | 'sliding';
+  /** Which end of the opening carries the hinge, along the wall (x for horizontal walls, y for vertical walls). */
+  hinge?: 'start' | 'end';
+  /** Side of the wall the leaf swings into: +1 toward larger x / y (right / rear), -1 toward smaller. */
+  swingSide?: 1 | -1;
   floorLevel?: number;
   orientation?: 'horizontal' | 'vertical'; // direction of the wall the opening sits in
   connects?: string[]; // room ids on either side; a single id means it opens to outside
@@ -224,6 +228,8 @@ export interface StaircaseDetails {
   width: number;
   height: number;
   type: 'dog_legged' | 'straight' | 'spiral';
+  /** End of the stair cell where people step on and off (the flat landing); doors may only open here. Defaults to 'rear'. */
+  footSide?: 'front' | 'rear';
 }
 
 export interface HouseAppearance {

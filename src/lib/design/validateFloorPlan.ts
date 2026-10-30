@@ -1,5 +1,6 @@
 import { DesignConstraints, DesignIssue, RoomType, StructuredDesignJSON } from '@/types/architectural';
 import { designCells, rectOverlapArea, sharedEdge } from '@/lib/geometry/planGeometry';
+import { isInStairMouth } from '@/lib/geometry/stairGeometry';
 import { REQUIRED_SPACE_TYPES, ROOM_TYPE_SPECS, countBedrooms, countRoomsOfType, floorName, inferRoomType, isBedroomType } from './roomTypes';
 
 export interface ValidationReport {
@@ -212,6 +213,31 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
       const base = stairCells.find((cell) => cell.floor === 0);
       if (base && stairCells.some((cell) => Math.abs(cell.rect.x - base.rect.x) > 0.3 || Math.abs(cell.rect.y - base.rect.y) > 0.3 || Math.abs(cell.rect.w - base.rect.w) > 0.3 || Math.abs(cell.rect.d - base.rect.d) > 0.3)) {
         fail('spatial', 'STAIR_MISALIGNED', 'The staircase is not in the same position on every floor.');
+      }
+    }
+
+    // Doors and archways may only open into a stair at its foot landing, never across the flights.
+    const stairCells = cells.filter((cell) => cell.type === 'stair');
+    const foot = design.stairs?.[0]?.footSide || 'rear';
+    for (const op of design.openings || []) {
+      if (op.type === 'window' || !op.orientation || (op.connects || []).length !== 2) continue;
+      const stair = stairCells.find((cell) => cell.floor === (op.floorLevel || 0) && op.connects!.includes(cell.id));
+      if (!stair) continue;
+      if (!isInStairMouth(stair.rect, foot, op.orientation, (op.x / 100) * plotWidth, (op.y / 100) * plotDepth)) {
+        fail('spatial', 'STAIR_DOOR', `${op.label || 'An opening'} opens into the staircase across its flights instead of at the foot landing.`);
+      }
+    }
+    // Two openings may not overlap on the same stretch of wall.
+    const placedOpenings = (design.openings || []).filter((op) => op.orientation);
+    for (let i = 0; i < placedOpenings.length; i++) {
+      for (let j = i + 1; j < placedOpenings.length; j++) {
+        const a = placedOpenings[i];
+        const b = placedOpenings[j];
+        if ((a.floorLevel || 0) !== (b.floorLevel || 0) || a.orientation !== b.orientation) continue;
+        const ax = (a.x / 100) * plotWidth, ay = (a.y / 100) * plotDepth, bx = (b.x / 100) * plotWidth, by = (b.y / 100) * plotDepth;
+        const along = a.orientation === 'horizontal';
+        if (Math.abs((along ? ay : ax) - (along ? by : bx)) > 0.15) continue;
+        if (Math.abs((along ? ax : ay) - (along ? bx : by)) < (a.width + b.width) / 2 - 0.05) fail('spatial', 'OPENING_OVERLAP', `${a.label || a.id} and ${b.label || b.id} overlap on the same wall.`);
       }
     }
 

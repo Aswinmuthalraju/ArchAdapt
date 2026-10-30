@@ -1,10 +1,12 @@
 'use client';
 
+import { describeSignUpError } from '@/lib/supabase/authErrors';
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Compass, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import AuthShell from '@/components/auth/AuthShell';
 
 function RegisterForm() {
   const router = useRouter();
@@ -83,17 +85,8 @@ function RegisterForm() {
       });
 
       if (error) {
-        const errorMsg = error.message?.toLowerCase() || '';
-        const errorCode = (error as any).code || '';
-        if (
-          errorCode === 'user_already_exists' ||
-          errorMsg.includes('already registered') ||
-          errorMsg.includes('already exists')
-        ) {
-          setErrorMessage('An account with this email already exists.');
-        } else {
-          setErrorMessage('Unable to create account. Please check your details and try again.');
-        }
+        console.warn('[auth] sign-up failed:', error.code, error.status, error.message);
+        setErrorMessage(describeSignUpError(error));
         return;
       }
 
@@ -118,7 +111,7 @@ function RegisterForm() {
       if (signInRes.data?.session) {
         router.replace(nextUrl);
       } else {
-        // If login failed, show clean prompt
+        // The project requires email confirmation before the first sign-in.
         router.replace(`/login?registered=true&next=${encodeURIComponent(nextUrl)}`);
       }
     } catch {
@@ -129,42 +122,14 @@ function RegisterForm() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-stone-900 flex flex-col justify-between">
-      {/* Minimal Top Brand Bar */}
-      <header className="w-full border-b border-stone-200 bg-[#F9F8F6]/90 backdrop-blur-md">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6 lg:px-12">
-          <Link href="/" className="group flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center bg-stone-900 text-stone-50 transition-transform group-hover:scale-105">
-              <Compass className="h-5 w-5 stroke-[1.5]" />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-serif text-xl font-medium tracking-tight text-stone-900">
-                ARCHADAPT<span className="font-mono text-xs text-terracotta-500 ml-1">AI</span>
-              </span>
-              <span className="font-mono text-[9px] uppercase tracking-widest text-stone-500">
-                Architectural Studio Engine
-              </span>
-            </div>
-          </Link>
-
-          <Link
-            href="/login"
-            className="font-sans text-xs font-semibold uppercase tracking-widest text-stone-700 hover:text-stone-950 transition-colors"
-          >
-            Sign In
-          </Link>
-        </div>
-      </header>
-
-      {/* Main Authentication Container */}
-      <main className="flex-1 flex items-center justify-center p-6 py-12">
-        <div className="w-full max-w-md border border-stone-200 bg-white p-8 sm:p-10 shadow-sm">
+    <AuthShell switchTo={{ href: '/login', prompt: 'Already have an account?', action: 'Sign in' }}>
+        <div className="w-full max-w-md">
           {/* Header */}
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center bg-stone-900 text-stone-50">
+          <div className="mb-8">
+            <div className="mb-5 flex h-11 w-11 items-center justify-center bg-plum-900 text-gold-300">
               <UserPlus className="h-5 w-5 stroke-[1.5]" />
             </div>
-            <h1 className="font-serif text-3xl font-normal text-stone-950">Create Account</h1>
+            <h1 className="font-serif text-4xl font-medium text-stone-950">Create Account</h1>
             <p className="mt-2 font-sans text-xs text-stone-600 leading-relaxed">
               Register to access conceptual floor plans, 3D massing models, and revision history.
             </p>
@@ -186,7 +151,7 @@ function RegisterForm() {
             <div>
               <label
                 htmlFor="register-name"
-                className="block font-mono text-[11px] uppercase tracking-wider text-stone-700 mb-1.5"
+                className="block text-[11px] text-stone-700 mb-1.5"
               >
                 Full Name
               </label>
@@ -211,7 +176,7 @@ function RegisterForm() {
             <div>
               <label
                 htmlFor="register-email"
-                className="block font-mono text-[11px] uppercase tracking-wider text-stone-700 mb-1.5"
+                className="block text-[11px] text-stone-700 mb-1.5"
               >
                 Email Address
               </label>
@@ -236,7 +201,7 @@ function RegisterForm() {
             <div>
               <label
                 htmlFor="register-password"
-                className="block font-mono text-[11px] uppercase tracking-wider text-stone-700 mb-1.5"
+                className="block text-[11px] text-stone-700 mb-1.5"
               >
                 Password
               </label>
@@ -268,7 +233,7 @@ function RegisterForm() {
             <div>
               <label
                 htmlFor="register-confirm-password"
-                className="block font-mono text-[11px] uppercase tracking-wider text-stone-700 mb-1.5"
+                className="block text-[11px] text-stone-700 mb-1.5"
               >
                 Confirm Password
               </label>
@@ -300,10 +265,10 @@ function RegisterForm() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center gap-2 bg-stone-900 py-3.5 px-4 font-sans text-xs font-semibold tracking-widest uppercase text-stone-50 hover:bg-stone-800 disabled:opacity-60 transition-all shadow-sm mt-3"
+              className="flex w-full items-center justify-center gap-2 btn-gem py-3.5 px-4 text-sm font-semibold text-white disabled:opacity-60 transition-all mt-3"
             >
               {loading ? (
-                <span className="font-mono text-xs">Creating Account…</span>
+                <span className="text-xs">Creating Account…</span>
               ) : (
                 <>
                   Create Account
@@ -319,7 +284,7 @@ function RegisterForm() {
               Already have an account?{' '}
               <Link
                 href={`/login${nextUrl !== '/dashboard' ? `?next=${encodeURIComponent(nextUrl)}` : ''}`}
-                className="font-semibold text-terracotta-600 hover:text-terracotta-700 underline underline-offset-4 transition-colors"
+                className="font-semibold text-magenta-600 hover:text-magenta-700 underline underline-offset-4 transition-colors"
               >
                 Sign In
               </Link>
@@ -327,24 +292,18 @@ function RegisterForm() {
           </div>
 
           {/* RLS Security Badge */}
-          <div className="mt-8 flex items-center justify-center gap-1.5 font-mono text-[10px] text-stone-500">
+          <div className="mt-8 flex items-center justify-center gap-1.5 text-[11px] text-stone-500">
             <ShieldCheck className="h-3.5 w-3.5 text-sage-500" />
             Protected by Supabase Row Level Security
           </div>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-stone-200 py-6 text-center font-mono text-[10px] uppercase text-stone-500">
-        ArchAdapt AI — Adaptive Architectural Design System
-      </footer>
-    </div>
+    </AuthShell>
   );
 }
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F9F8F6] flex items-center justify-center font-mono text-xs uppercase text-stone-500">Loading…</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#FBF8F4] flex items-center justify-center text-xs text-stone-500">Loading…</div>}>
       <RegisterForm />
     </Suspense>
   );

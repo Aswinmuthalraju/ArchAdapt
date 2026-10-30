@@ -1,76 +1,31 @@
-# ArchAdapt AI — Visual Design System & Contract (`DESIGN.md`)
+# ArchAdapt visual identity
 
-## 1. Visual DNA & Design Philosophy
-ArchAdapt AI is designed as a **quiet, architectural studio application** inspired by contemporary architectural monograph publications and high-end design agency websites.
+## Direction
+An editorial, Awwwards-style marketing site: huge condensed serif type, generous negative space, one idea per screen, scroll-choreographed reveals and full-bleed colour blocks. The scroll choreography and pacing take after ERA Residence's design language. We use none of its logo, photography, copy or fonts. Photography is the project's own stock (`public/images/*.jpg`) plus floor plans drawn live by the layout engine. The bougainvillea branches in `public/blossom/` are original vector artwork, generated procedurally.
 
-Key characteristics:
-- **Restrained & Editorial**: Generous whitespace, precise micro-borders, minimal decoration, clear typographic scale.
-- **Architectural Color Palette**: Warm neutral stone, deep charcoal slate, architectural cream, and subtle terracotta/copper accenting.
-- **Tactile & Structural**: Fine 1px borders (`border-stone-200` / `border-white/10`), subtle card elevations, and geometric grid layouts.
-- **High Signal-to-Noise**: Avoid generic saturated AI gradients, purple glow effects, or cartoonish rounded cards (`rounded-xl` / `rounded-2xl` used selectively; default crisp `rounded-none` or `rounded-md`).
+## Palette (CSS variables on `:root`, mirrored in Tailwind)
+- Ivory `#F4F1EA`: page background, never pure white
+- Ink `#1B1B1F`: text
+- Plum `#3B0A26`: dark sections, the footer and the workspace surfaces
+- Sky `#B9D3E6`: "breathing" colour blocks
+- Blossom `#E0218A` / soft `#F6B8D6`: decorative pops only. Use `magenta-500` (`#B8126F`) for small text on ivory.
+- Gold `#C9A227`, light `#E8CF7A`, deep `#8C6A12`, with metallic gradient `--gold-metal`. Keep gold under 5% of the screen: emblem, hairlines, counters, hover wipes, focus rings, the footer sweep. Use deep gold on light backgrounds and light gold on dark ones.
 
----
+## Typography (Google Fonts through `next/font`)
+- Display: Bodoni Moda, uppercase, line-height ~0.9, `scaleY(1.15)` per line to read tall and condensed (`.display`, `.display--md`, `.display--sm`)
+- Script accent: Pinyon Script, laid over one word of the hero and drawn on with a clip wipe
+- Labels and UI: Jost, 11px, uppercase, 0.2em tracking (`.label`)
+- Body: Jost, 15px, line-height 1.7, narrow columns (`.body`)
 
-## 2. Color Tokens
+## Motion
+GSAP + ScrollTrigger, with Lenis smooth scroll on marketing pages only (never in the workspace). Animate transform and opacity. The exceptions are deliberate: the clip-path curtains and the short blur on stretched headings. Shared reveals are driven by data attributes; see `src/components/motion/reveals.ts`. `prefers-reduced-motion` turns off Lenis, scrubbing, the preloader counter, the cursor and the looping animations, leaving simple fades. Below 900px the horizontal gallery becomes a swipe carousel and scrubbed effects play once.
 
-### Primary Palette
-- **Canvas / Background (Light)**: `#F9F8F6` (Warm Stone White / Paper)
-- **Canvas / Background (Dark / Workspace)**: `#111315` (Deep Charcoal Slate)
-- **Surface / Card (Light)**: `#FFFFFF` (Pure White)
-- **Surface / Card (Dark)**: `#181A1D` (Obsidian Surface)
-- **Border / Divider (Light)**: `#E6E3DE` (Warm Sand Border)
-- **Border / Divider (Dark)**: `#2A2D32` (Muted Charcoal Line)
+## Marketing page anatomy
+Wrap a page in `MotionPage`. It provides the header, footer, cursor, smooth scroll, colour stage and section rail. Tag sections with:
+- `data-section="Name"` for the left rail counter
+- `data-bg="ivory|sky|plum"` for the crossfading backdrop
+- `data-header="ink|ivory"` for header and rail colour over that section
+Headings use `<SplitText>` with `data-stretch`. Images use `data-curtain` / `data-curtain-img`. Blossoms go on at most one corner per section and never under the fixed header or nav.
 
-### Text Tokens
-- **Text Primary (Light)**: `#121417` (Deep Ink)
-- **Text Secondary (Light)**: `#63666A` (Muted Slate)
-- **Text Primary (Dark)**: `#F3F4F6` (Off-White)
-- **Text Secondary (Dark)**: `#9CA3AF` (Muted Grey)
-
-### Architectural Accent Palette
-- **Terracotta Accent**: `#C86A4B` (Warm Clay / Primary CTA accent)
-- **Architectural Copper**: `#B87333` (Secondary Highlights)
-- **Blueprint Blue**: `#2B5B84` (Structural / Grid annotations)
-- **Sage / Environmental**: `#4A6B5D` (Climate-adaptive indicators)
-
----
-
-## 3. Typography Scale
-Powered by **Plus Jakarta Sans** (Sans-serif UI) & **Cinzel** / **Playfair Display** (Editorial Architectural Headers).
-
-- **Display H1**: `font-serif text-4xl sm:text-5xl lg:text-6xl font-light tracking-tight leading-[1.1]`
-- **Section H2**: `font-serif text-2xl sm:text-3xl font-normal tracking-tight text-stone-900`
-- **Component H3**: `font-sans text-lg font-semibold tracking-wide uppercase text-stone-800`
-- **Body Regular**: `font-sans text-sm sm:text-base leading-relaxed text-stone-600`
-- **Technical / Code / Annotations**: `font-mono text-xs tracking-wider uppercase text-stone-500`
-
----
-
-## 4. UI Components Specification
-
-### Navigation Bar
-- **Style**: Floating / Sticky minimal top bar with 1px border bottom (`border-stone-200` / `border-white/10`).
-- **Brand Mark**: Clean geometric icon with serif typography "ARCHADAPT AI".
-- **Actions**: Quiet navigation links + Sharp primary button ("Start Designing").
-
-### Cards & Panels
-- **Structure**: Clean 1px border, 0px or 4px subtle rounded corners (`rounded-sm`), padding `p-6` or `p-8`.
-- **Hover**: Subtle border color shift (`hover:border-stone-400`), zero noisy drop shadows.
-
-### Buttons
-- **Primary**: Solid Deep Charcoal `#121417` with white text, `px-6 py-3 text-xs tracking-widest uppercase font-semibold hover:bg-stone-800 transition-all rounded-none`.
-- **Secondary / Outline**: 1px border `#121417`, transparent bg, `px-6 py-3 text-xs tracking-widest uppercase font-semibold hover:bg-stone-100 transition-all rounded-none`.
-- **Accent**: Warm Clay `#C86A4B` for primary blueprint/generation actions.
-
-### Architectural Canvas & Floor Plan Renderer
-- **Background**: Grid pattern on warm cream `#F4F2EC` or dark blueprint slate `#0F1115`.
-- **Walls**: High contrast 2px-4px solid black/white vectors with fill.
-- **Room Labels**: Uppercase sans-serif with square footage / metric dimensions (`LIVING ROOM • 18' x 14'`).
-- **Circulation & Openings**: Arc door swings, double window cutouts, stair tread indicators.
-
----
-
-## 5. Responsive & Layout Contract
-- **Desktop (Primary Target)**: 3-column workspace layout (Left: 320px sidebar, Center: Flex canvas, Right: 380px AI panel).
-- **Tablet**: Collapsible sidebars with drawer toggle.
-- **Mobile**: Stacked tabs for Workspace (2D Plan, 3D Preview, What-If Assistant).
+## Plan and model conventions
+Preserve canonical 2D/3D geometry and validation. Walls use filled poché; doors show hinge, leaf and swing. Stairs retain foot and intermediate landings. The road remains at the top and the compass follows plot orientation.

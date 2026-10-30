@@ -2,13 +2,15 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, Environment, ContactShadows } from '@react-three/drei';
+import { OrbitControls, PerspectiveCamera, Environment, Lightformer, ContactShadows } from '@react-three/drei';
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { StructuredDesignJSON, HouseAppearance } from '@/types/architectural';
-import { buildHouseGeometry, HouseGeometry3D } from '@/lib/geometry/buildHouseGeometry';
+import { buildHouseGeometry, Box3D, HouseGeometry3D } from '@/lib/geometry/buildHouseGeometry';
 import { getHouseMaterials, HouseMaterialSystem } from '@/lib/geometry/materials';
 import { floorName } from '@/lib/design/roomTypes';
 import AppearancePanel from '@/components/workspace/AppearancePanel';
-import { Box, Palette, Home } from 'lucide-react';
+import { Palette, Home, LocateFixed } from 'lucide-react';
 
 interface Massing3DViewerProps {
   design: StructuredDesignJSON;
@@ -17,9 +19,45 @@ interface Massing3DViewerProps {
 
 type LightingMode = 'day' | 'evening' | 'night';
 
-const DEFAULT_APPEARANCE: HouseAppearance = { wallColor: '#F4F1EA', roofColor: '#C86A4B', frameColor: '#121417', accentMaterial: 'wood' };
+const DEFAULT_APPEARANCE: HouseAppearance = { wallColor: '#F4F1EA', roofColor: '#66764F', frameColor: '#232822', accentMaterial: 'wood' };
 
-function StyleAwareRoofMesh({ roof, materials }: { roof: HouseGeometry3D['roofs'][0]; materials: HouseMaterialSystem }) {
+const SCENES: Record<LightingMode, { background: string; ground: string; hemi: [string, string, number]; sun: { position: [number, number, number]; color: string; intensity: number }; exposure: number; glow: number }> = {
+  day: { background: '#EDE6DC', ground: '#E3DACD', hemi: ['#FFF7EA', '#CDBFAF', 0.75], sun: { position: [16, 26, -14], color: '#FFF4E0', intensity: 2.4 }, exposure: 1, glow: 0 },
+  evening: { background: '#394338', ground: '#2B332B', hemi: ['#FFB38A', '#3E4B3B', 0.5], sun: { position: [26, 10, -6], color: '#FF9A63', intensity: 2 }, exposure: 1.05, glow: 0.35 },
+  night: { background: '#171C19', ground: '#1C231D', hemi: ['#6B4C8F', '#171C19', 0.28], sun: { position: [-12, 22, 10], color: '#B9A6FF', intensity: 0.5 }, exposure: 1.1, glow: 0.85 }
+};
+
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+
+/** Merges many boxes into one geometry so a whole class of parts is a single draw call. */
+function mergeBoxes(boxes: Box3D[]): THREE.BufferGeometry | null {
+  if (!boxes.length) return null;
+  const matrix = new THREE.Matrix4();
+  const parts = boxes.map((box) => {
+    const geometry = unitBox.clone();
+    matrix.compose(new THREE.Vector3(...box.position), new THREE.Quaternion(), new THREE.Vector3(...box.size));
+    geometry.applyMatrix4(matrix);
+    return geometry;
+  });
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((part) => part.dispose());
+  return merged;
+}
+
+/** Builds a mesh from merged boxes and disposes the geometry when the parts change. */
+function Merged({ boxes, children, castShadow = true, receiveShadow = true }: { boxes: Box3D[]; children: React.ReactNode; castShadow?: boolean; receiveShadow?: boolean }) {
+  const geometry = useMemo(() => mergeBoxes(boxes), [boxes]);
+  useEffect(() => () => geometry?.dispose(), [geometry]);
+  if (!geometry) return null;
+  return (
+    <mesh geometry={geometry} castShadow={castShadow} receiveShadow={receiveShadow}>
+      {children}
+    </mesh>
+  );
+}
+
+function RoofMesh({ roof, materials }: { roof: HouseGeometry3D['roofs'][0]; materials: HouseMaterialSystem }) {
+  const roofMaterial = <meshStandardMaterial color={materials.roof.color} roughness={materials.roof.roughness} metalness={materials.roof.metalness} />;
   if (roof.type === 'sloped_hipped_gable') {
     const [width, height, depth] = roof.size;
     return (
@@ -28,58 +66,59 @@ function StyleAwareRoofMesh({ roof, materials }: { roof: HouseGeometry3D['roofs'
         <group scale={[width / Math.SQRT2, 1, depth / Math.SQRT2]}>
           <mesh rotation={[0, Math.PI / 4, 0]} castShadow receiveShadow>
             <coneGeometry args={[1, height, 4]} />
-            <meshStandardMaterial color={materials.roof.color} roughness={materials.roof.roughness} metalness={materials.roof.metalness} />
+            {roofMaterial}
           </mesh>
         </group>
         <mesh position={[0, -height / 2 + 0.06, 0]} castShadow receiveShadow>
           <boxGeometry args={[width, 0.12, depth]} />
-          <meshStandardMaterial color={materials.roof.color} roughness={0.7} />
+          {roofMaterial}
         </mesh>
       </group>
     );
   }
-
   if (roof.type === 'minimal_slab') {
     return (
       <mesh position={roof.position} castShadow receiveShadow>
         <boxGeometry args={roof.size} />
-        <meshStandardMaterial color={materials.roof.color} roughness={materials.roof.roughness} />
+        {roofMaterial}
       </mesh>
     );
   }
-
   return (
     <group position={roof.position}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={roof.size} />
-        <meshStandardMaterial color={materials.roof.color} roughness={materials.roof.roughness} />
+        {roofMaterial}
       </mesh>
-      <mesh position={[0, roof.size[1] / 2 + 0.05, 0]}>
+      <mesh position={[0, roof.size[1] / 2 + 0.05, 0]} castShadow>
         <boxGeometry args={[roof.size[0] + 0.08, 0.1, roof.size[2] + 0.08]} />
-        <meshStandardMaterial color="#78736A" roughness={0.4} />
+        <meshStandardMaterial color="#9C8F86" roughness={0.5} />
       </mesh>
     </group>
   );
 }
 
-function ArchitecturalBuildingModel({
-  geometry,
-  materials,
-  lightingMode,
-  visibleUpTo,
-  showRoof
-}: {
-  geometry: HouseGeometry3D;
-  materials: HouseMaterialSystem;
-  lightingMode: LightingMode;
-  visibleUpTo: number;
-  showRoof: boolean;
-}) {
-  const lit = lightingMode !== 'day';
-  const shown = <T extends { floorLevel: number }>(items: T[]) => items.filter((item) => item.floorLevel <= visibleUpTo);
-  const topVisible = visibleUpTo;
-  // The ceiling of the highest visible floor is lifted off with the roof so the rooms can be seen.
-  const ceilings = shown(geometry.ceilings).filter((ceiling) => showRoof || ceiling.floorLevel < topVisible);
+function BuildingModel({ geometry, materials, mode, visibleUpTo, showRoof }: { geometry: HouseGeometry3D; materials: HouseMaterialSystem; mode: LightingMode; visibleUpTo: number; showRoof: boolean }) {
+  const scene = SCENES[mode];
+
+  const parts = useMemo(() => {
+    const shown = <T extends { floorLevel: number }>(items: T[]) => items.filter((item) => item.floorLevel <= visibleUpTo);
+    // Floors grouped by colour, then merged: one draw call per room colour instead of one per room.
+    const groups = new Map<string, Box3D[]>();
+    for (const room of shown(geometry.rooms)) groups.set(room.color, [...(groups.get(room.color) || []), room]);
+    return {
+      floors: Array.from(groups.entries()),
+      // The ceiling of the highest visible floor is lifted off with the roof so the rooms can be seen.
+      ceilings: shown(geometry.ceilings).filter((ceiling) => showRoof || ceiling.floorLevel < visibleUpTo),
+      walls: shown(geometry.walls),
+      frames: shown(geometry.frames),
+      doors: shown(geometry.openings).filter((o) => o.kind === 'door'),
+      glass: shown(geometry.openings).filter((o) => o.kind !== 'door'),
+      steps: shown(geometry.stairSteps),
+      railings: shown(geometry.railings),
+      pillars: shown(geometry.pillars)
+    };
+  }, [geometry, visibleUpTo, showRoof]);
 
   return (
     <group>
@@ -93,84 +132,69 @@ function ArchitecturalBuildingModel({
         <meshStandardMaterial color={materials.driveway.color} roughness={materials.driveway.roughness} />
       </mesh>
 
-      {/* One floor plate per canonical room */}
-      {shown(geometry.rooms).map((room) => (
-        <mesh key={room.id} position={room.position} receiveShadow>
-          <boxGeometry args={room.size} />
-          <meshStandardMaterial color={room.color} roughness={room.isOpen ? 0.95 : 0.75} />
-        </mesh>
+      {parts.floors.map(([color, boxes]) => (
+        <Merged key={color} boxes={boxes} castShadow={false}>
+          <meshStandardMaterial color={color} roughness={0.7} />
+        </Merged>
       ))}
 
-      {ceilings.map((slab, index) => (
-        <mesh key={`ceiling-${index}`} position={slab.position} castShadow receiveShadow>
-          <boxGeometry args={slab.size} />
-          <meshStandardMaterial color="#C8C2B8" roughness={0.7} />
-        </mesh>
-      ))}
+      <Merged boxes={parts.ceilings}>
+        <meshStandardMaterial color="#D9D0C4" roughness={0.75} />
+      </Merged>
 
-      {/* Walls, cut by the canonical doors and windows */}
-      {shown(geometry.walls).map((wall, index) => (
-        <mesh key={`wall-${index}`} position={wall.position} castShadow receiveShadow>
-          <boxGeometry args={wall.size} />
-          <meshStandardMaterial color={materials.wall.color} roughness={materials.wall.roughness} metalness={materials.wall.metalness} />
-        </mesh>
-      ))}
+      <Merged boxes={parts.walls}>
+        <meshStandardMaterial color={materials.wall.color} roughness={materials.wall.roughness} metalness={materials.wall.metalness} />
+      </Merged>
 
-      {shown(geometry.openings).map((opening) =>
-        opening.kind === 'door' ? (
-          <mesh key={opening.id} position={opening.position} castShadow>
-            <boxGeometry args={opening.size} />
-            <meshStandardMaterial color={materials.woodAccent.color} roughness={materials.woodAccent.roughness} />
-          </mesh>
-        ) : (
-          <mesh key={opening.id} position={opening.position}>
-            <boxGeometry args={opening.size} />
-            <meshPhysicalMaterial
-              color={lit ? '#FCE38A' : materials.glass.color}
-              transmission={lit ? 0.2 : materials.glass.transmission}
-              opacity={materials.glass.opacity}
-              transparent
-              roughness={materials.glass.roughness}
-              emissive={lightingMode === 'night' ? '#FCE38A' : lightingMode === 'evening' ? '#FFB347' : '#000000'}
-              emissiveIntensity={lightingMode === 'night' ? 0.7 : lightingMode === 'evening' ? 0.3 : 0}
-            />
-          </mesh>
-        )
-      )}
+      <Merged boxes={parts.frames}>
+        <meshStandardMaterial color={materials.frame.color} roughness={materials.frame.roughness} metalness={materials.frame.metalness} />
+      </Merged>
 
-      {/* Stair flights between floors */}
-      {shown(geometry.stairSteps).map((step, index) => (
-        <mesh key={`step-${index}`} position={step.position} castShadow receiveShadow>
-          <boxGeometry args={step.size} />
-          <meshStandardMaterial color="#A8A297" roughness={0.6} />
-        </mesh>
-      ))}
+      <Merged boxes={parts.doors}>
+        <meshStandardMaterial color={materials.woodAccent.color} roughness={materials.woodAccent.roughness} />
+      </Merged>
 
-      {shown(geometry.railings).map((rail, index) => (
-        <mesh key={`rail-${index}`} position={rail.position}>
-          <boxGeometry args={rail.size} />
-          <meshPhysicalMaterial color="#2B5B84" transmission={0.7} opacity={0.5} transparent roughness={0.2} />
-        </mesh>
-      ))}
+      <Merged boxes={parts.glass} castShadow={false}>
+        <meshPhysicalMaterial
+          color={mode === 'day' ? '#9DB7C4' : '#FCE9B0'}
+          transparent
+          opacity={mode === 'day' ? 0.5 : 0.8}
+          roughness={0.05}
+          metalness={0.15}
+          clearcoat={1}
+          emissive={mode === 'day' ? '#000000' : '#FFC773'}
+          emissiveIntensity={scene.glow}
+        />
+      </Merged>
 
-      {shown(geometry.pillars).map((pillar, index) => (
+      <Merged boxes={parts.steps}>
+        <meshStandardMaterial color="#B9AEA2" roughness={0.65} />
+      </Merged>
+
+      <Merged boxes={parts.railings} castShadow={false}>
+        <meshPhysicalMaterial color="#B1BCA0" transparent opacity={0.55} roughness={0.2} metalness={0.4} />
+      </Merged>
+
+      {parts.pillars.map((pillar, index) => (
         <mesh key={`pillar-${index}`} position={pillar.position} castShadow receiveShadow>
-          <cylinderGeometry args={[pillar.radius, pillar.radius, pillar.height, 16]} />
+          <cylinderGeometry args={[pillar.radius, pillar.radius, pillar.height, 20]} />
           <meshStandardMaterial color={materials.woodAccent.color} roughness={materials.woodAccent.roughness} />
         </mesh>
       ))}
 
-      {showRoof && visibleUpTo >= geometry.totalFloors - 1 && geometry.roofs.map((roof, index) => (
-        <StyleAwareRoofMesh key={index} roof={roof} materials={materials} />
-      ))}
+      {showRoof && visibleUpTo >= geometry.totalFloors - 1 && geometry.roofs.map((roof, index) => <RoofMesh key={index} roof={roof} materials={materials} />)}
     </group>
   );
 }
+
+const toolbarButton = (active: boolean) =>
+  `flex h-9 items-center gap-1.5 border px-3 text-sm transition-colors ${active ? 'border-gold-400 bg-gold-400/15 font-medium text-gold-200' : 'border-plum-600 bg-plum-800 text-stone-300 hover:border-gold-500 hover:text-gold-200'}`;
 
 export default function Massing3DViewer({ design, onAppearanceChange }: Massing3DViewerProps) {
   const [lightingMode, setLightingMode] = useState<LightingMode>('day');
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [showRoof, setShowRoof] = useState(true);
+  const [viewKey, setViewKey] = useState(0);
   const [localAppearance, setLocalAppearance] = useState<HouseAppearance>(design.appearance || DEFAULT_APPEARANCE);
 
   // The model always follows the design it is given: no stale copy, no manual "regenerate".
@@ -188,133 +212,132 @@ export default function Massing3DViewer({ design, onAppearanceChange }: Massing3
   };
 
   const materials = useMemo(() => getHouseMaterials(localAppearance, design.constraints?.style), [localAppearance, design.constraints?.style]);
-
+  const scene = SCENES[lightingMode];
   const distance = houseGeometry.recommendedCameraDistance;
+  const reach = Math.max(houseGeometry.plotSize[0], houseGeometry.plotSize[2]);
   // The road is at -Z, so the default view looks at the front of the house from the road side.
-  const camPos: [number, number, number] = [houseGeometry.cameraTarget[0] + distance * 0.6, distance * 0.6, houseGeometry.cameraTarget[2] - distance * 0.75];
-  const environmentPreset = lightingMode === 'night' ? 'night' : lightingMode === 'evening' ? 'sunset' : 'city';
+  const camPos: [number, number, number] = [houseGeometry.cameraTarget[0] + distance * 0.62, distance * 0.58, houseGeometry.cameraTarget[2] - distance * 0.78];
   const floorLevels = Array.from({ length: houseGeometry.totalFloors }, (_, level) => level);
 
   return (
-    <div className="relative flex flex-col h-full w-full bg-[#EFECE6] dark:bg-[#0B0C0E] border border-stone-300 dark:border-stone-800 overflow-hidden select-none">
-      {/* 3D Header Toolbar */}
-      <div className="flex flex-wrap items-center justify-between px-6 py-3 border-b border-stone-300 dark:border-stone-800 bg-[#F9F8F6]/80 dark:bg-stone-900/80 backdrop-blur-sm z-10 gap-3">
-        <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-stone-700 dark:text-stone-300">
-          <Box className="h-4 w-4 text-terracotta-500" />
-          <span>3D Model — {houseGeometry.totalFloors} {houseGeometry.totalFloors === 1 ? 'Storey' : 'Storeys'}, {houseGeometry.rooms.length} Rooms</span>
-          <span className="text-stone-400">|</span>
-          <span className="text-amber-800 dark:text-amber-400 font-semibold">{houseGeometry.styleName}</span>
+    <div className="relative flex h-full w-full flex-col overflow-hidden bg-plum-950 select-none">
+      <div className="z-10 flex flex-wrap items-center justify-between gap-3 border-b border-plum-700 bg-plum-850/95 px-5 py-3 backdrop-blur">
+        <div>
+          <p className="font-serif text-lg leading-none text-stone-50">3D model</p>
+          <p className="mt-1 text-xs text-stone-400">
+            {houseGeometry.totalFloors} {houseGeometry.totalFloors === 1 ? 'storey' : 'storeys'} · {houseGeometry.rooms.length} rooms · <span className="text-gold-300">{houseGeometry.styleName}</span>
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Floors to show: lower the cut to look inside */}
           {floorLevels.length > 1 && (
-            <div className="flex items-center border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 p-0.5">
+            <div role="group" aria-label="Floors shown" className="flex border border-plum-600 bg-plum-800 p-0.5">
               {floorLevels.map((level) => (
                 <button
                   key={level}
                   onClick={() => setVisibleUpTo(level)}
+                  aria-pressed={visibleUpTo === level}
                   title={`Show the model up to the ${floorName(level).toLowerCase()}`}
-                  className={`px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-all ${
-                    visibleUpTo === level
-                      ? 'bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900 font-bold'
-                      : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
-                  }`}
+                  className={`px-3 py-1.5 text-sm transition-colors ${visibleUpTo === level ? 'bg-gold-400 font-semibold text-plum-950' : 'text-stone-300 hover:text-gold-200'}`}
                 >
-                  {level === houseGeometry.totalFloors - 1 ? 'All Floors' : floorName(level)}
+                  {level === houseGeometry.totalFloors - 1 ? 'All floors' : floorName(level)}
                 </button>
               ))}
             </div>
           )}
 
-          <button
-            onClick={() => setShowRoof(!showRoof)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition-all ${
-              showRoof
-                ? 'border-stone-900 bg-stone-900 text-stone-50 dark:border-stone-100 dark:bg-stone-100 dark:text-stone-900'
-                : 'border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300'
-            }`}
-            title="Lift the roof off to see the rooms"
-          >
-            <Home className="h-3.5 w-3.5" />
-            Roof {showRoof ? 'On' : 'Off'}
+          <button onClick={() => setShowRoof((v) => !v)} aria-pressed={showRoof} className={toolbarButton(showRoof)} title="Lift the roof off to see the rooms">
+            <Home className="h-4 w-4" />
+            Roof {showRoof ? 'on' : 'off'}
           </button>
 
-          <button
-            onClick={() => setIsAppearanceOpen(!isAppearanceOpen)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-200 hover:border-stone-900 transition-all shadow-sm"
-          >
-            <Palette className="h-3.5 w-3.5 text-terracotta-500" />
+          <button onClick={() => setIsAppearanceOpen((v) => !v)} aria-expanded={isAppearanceOpen} className={toolbarButton(isAppearanceOpen)}>
+            <Palette className="h-4 w-4" />
             Appearance
           </button>
 
-          <div className="flex items-center border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 p-0.5">
+          <div role="group" aria-label="Lighting" className="flex border border-plum-600 bg-plum-800 p-0.5">
             {(['day', 'evening', 'night'] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setLightingMode(mode)}
-                className={`px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-all ${
-                  lightingMode === mode
-                    ? 'bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900 font-bold'
-                    : 'text-stone-600 dark:text-stone-400 hover:text-stone-900'
-                }`}
+                aria-pressed={lightingMode === mode}
+                className={`px-3 py-1.5 text-sm capitalize transition-colors ${lightingMode === mode ? 'bg-gold-400 font-semibold text-plum-950' : 'text-stone-300 hover:text-gold-200'}`}
               >
                 {mode}
               </button>
             ))}
           </div>
+
+          <button onClick={() => setViewKey((k) => k + 1)} className={toolbarButton(false)} title="Return to the starting view" aria-label="Reset view">
+            <LocateFixed className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
-      {isAppearanceOpen && (
-        <AppearancePanel
-          appearance={localAppearance}
-          onChange={handleAppearanceUpdate}
-          onClose={() => setIsAppearanceOpen(false)}
-        />
-      )}
+      {isAppearanceOpen && <AppearancePanel appearance={localAppearance} onChange={handleAppearanceUpdate} onClose={() => setIsAppearanceOpen(false)} />}
 
-      {/* R3F Canvas Container */}
-      <div className="relative flex-1 w-full h-full">
-        <Canvas shadows>
-          <PerspectiveCamera makeDefault position={camPos} fov={40} />
+      <div className="relative min-h-0 w-full flex-1">
+        <Canvas
+          key={viewKey}
+          shadows="soft"
+          frameloop="demand"
+          dpr={[1, 1.75]}
+          gl={{ antialias: true, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: scene.exposure }}
+        >
+          <color attach="background" args={[scene.background]} />
+          <fog attach="fog" args={[scene.background, distance * 1.8, distance * 5]} />
+          <PerspectiveCamera makeDefault position={camPos} fov={38} near={0.5} far={distance * 12} />
           <OrbitControls
-            enablePan
-            enableZoom
+            makeDefault
+            enableDamping
+            dampingFactor={0.09}
+            rotateSpeed={0.7}
+            zoomSpeed={0.8}
             target={houseGeometry.cameraTarget}
-            minDistance={5}
-            maxDistance={distance * 3}
-            maxPolarAngle={Math.PI / 2.05}
+            minDistance={4}
+            maxDistance={distance * 2.6}
+            minPolarAngle={0.15}
+            maxPolarAngle={Math.PI / 2.03}
           />
 
-          <ambientLight intensity={lightingMode === 'night' ? 0.15 : lightingMode === 'evening' ? 0.4 : 0.8} />
+          <hemisphereLight args={[scene.hemi[0], scene.hemi[1], scene.hemi[2]]} />
           <directionalLight
-            position={lightingMode === 'night' ? [-10, 15, 10] : lightingMode === 'evening' ? [25, 12, -10] : [18, 28, -18]}
-            intensity={lightingMode === 'night' ? 0.4 : lightingMode === 'evening' ? 1.2 : 1.8}
-            color={lightingMode === 'evening' ? '#FFA07A' : '#FFFFFF'}
+            position={scene.sun.position}
+            color={scene.sun.color}
+            intensity={scene.sun.intensity}
             castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
-            shadow-camera-left={-20}
-            shadow-camera-right={20}
-            shadow-camera-top={20}
-            shadow-camera-bottom={-20}
-          />
-          <Environment preset={environmentPreset} />
-
-          <ArchitecturalBuildingModel
-            geometry={houseGeometry}
-            materials={materials}
-            lightingMode={lightingMode}
-            visibleUpTo={visibleUpTo}
-            showRoof={showRoof}
+            shadow-mapSize={[2048, 2048]}
+            shadow-bias={-0.0004}
+            shadow-normalBias={0.04}
+            shadow-camera-left={-reach * 0.9}
+            shadow-camera-right={reach * 0.9}
+            shadow-camera-top={reach * 0.9}
+            shadow-camera-bottom={-reach * 0.9}
+            shadow-camera-near={1}
+            shadow-camera-far={120}
           />
 
-          <ContactShadows position={[0, 0.01, 0]} opacity={0.5} scale={distance * 2} blur={2.5} far={8} />
+          {/* Procedural studio reflections: no network fetch, so the model never waits on a remote file */}
+          <Environment resolution={128} frames={1}>
+            <Lightformer form="rect" intensity={2.2} position={[0, 6, -6]} scale={[14, 4, 1]} color="#FFF3DC" />
+            <Lightformer form="rect" intensity={1.2} position={[-8, 3, 4]} scale={[6, 6, 1]} color="#98A67E" />
+            <Lightformer form="rect" intensity={1.2} position={[8, 3, 4]} scale={[6, 6, 1]} color="#B1BCA0" />
+          </Environment>
+
+          {/* Studio floor */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.07, 0]} receiveShadow>
+            <circleGeometry args={[distance * 4, 64]} />
+            <meshStandardMaterial color={scene.ground} roughness={1} />
+          </mesh>
+
+          <BuildingModel geometry={houseGeometry} materials={materials} mode={lightingMode} visibleUpTo={visibleUpTo} showRoof={showRoof} />
+
+          <ContactShadows position={[0, 0.02, 0]} opacity={lightingMode === 'night' ? 0.25 : 0.4} scale={distance * 2} blur={2.6} far={7} resolution={512} frames={1} />
         </Canvas>
 
-        <div className="absolute bottom-4 left-4 z-10 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md px-4 py-2 border border-stone-300 dark:border-stone-700 text-[10px] font-mono text-stone-600 dark:text-stone-400 uppercase tracking-wider shadow-sm">
-          Built from the same plan as the 2D view • Road side faces the camera • Turn the roof off to look inside
+        <div className="pointer-events-none absolute bottom-4 left-4 border border-plum-600 bg-plum-850/90 px-3.5 py-2 text-xs text-stone-300 backdrop-blur">
+          Same plan as the 2D view, seen from the road · drag to orbit · scroll to zoom · roof off to look inside
         </div>
       </div>
     </div>

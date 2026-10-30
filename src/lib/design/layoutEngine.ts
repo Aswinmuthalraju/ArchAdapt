@@ -16,7 +16,7 @@ import {
   StructuredDesignJSON
 } from '@/types/architectural';
 import { DEFAULT_APPEARANCE_BY_STYLE } from '@/lib/geometry/materials';
-import { PlanCell, Rect, deriveWallSegments, round2, wallsToCanonical } from '@/lib/geometry/planGeometry';
+import { PlanCell, Rect, deriveWallSegments, round2, sharedEdge, wallsToCanonical } from '@/lib/geometry/planGeometry';
 import { ROOM_TYPE_SPECS, floorName, isBedroomType } from './roomTypes';
 import { solveOpenings } from './openings';
 
@@ -37,8 +37,8 @@ export type LayoutResult = LayoutSuccess | LayoutFailure;
 
 const BANDS: PlanBand[] = ['front', 'middle', 'rear'];
 const SIDE_RANK: Record<PlanSide, number> = { left: 0, center: 1, right: 2 };
-const STAIR_WIDTH = 7.5;
-const STAIR_MIN_DEPTH = 10;
+const STAIR_WIDTH = 7;
+const STAIR_MIN_DEPTH = 12;
 const MAX_BAND_DEPTH = 80;
 
 interface WorkRoom extends ProgramRoom {
@@ -110,7 +110,7 @@ function unitWidth(unit: Unit, depth: number): number {
 function unitPreferredDepth(unit: Unit): number {
   const [major, ...inline] = unit.rooms;
   if (major.type === 'parking') return 17;
-  if (major.type === 'stair') return 12;
+  if (major.type === 'stair') return 14;
   return Math.min(19, Math.sqrt(major.area * 1.25) + sum(inline.map((room) => spec(room).minSide)));
 }
 
@@ -644,6 +644,42 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     }
   }
 
+  // A dressing area is only worth keeping if its bedroom really shares a wall with it. When the bedroom was
+  // shortened by a sit-out behind it, the depth goes back to the room it was carved from.
+  for (const entry of [...placed]) {
+    if (entry.room.type !== 'dressing' || !entry.room.derived || !entry.room.attachedTo) continue;
+    const owner = placed.find((other) => other.room.id === entry.room.attachedTo && other.room.floor === entry.room.floor);
+    const edge = owner ? sharedEdge(owner.rect, entry.rect) : null;
+    if (edge && edge.length >= 3) continue;
+    const donor = placed.find((other) => other.room.floor === entry.room.floor && other !== entry && Math.abs(other.rect.x - entry.rect.x) < 0.05 && Math.abs(other.rect.w - entry.rect.w) < 0.05 && Math.abs(other.rect.y + other.rect.d - entry.rect.y) < 0.05);
+    if (donor) {
+      donor.rect = { ...donor.rect, d: donor.rect.d + entry.rect.d };
+      placed.splice(placed.indexOf(entry), 1);
+    }
+  }
+
+  // A bath or dressing room belongs to the bedroom it actually touches: where the one named in the
+  // programme ended up elsewhere, it is re-attached to a neighbouring bedroom that has no ensuite yet.
+  const SLEEPERS: RoomType[] = ['master_bedroom', 'bedroom', 'guest_room'];
+  const retargeted = new Map<string, string>();
+  for (const entry of placed) {
+    if (!entry.room.attachedTo || !['bathroom', 'dressing'].includes(entry.room.type)) continue;
+    const owner = placed.find((other) => other.room.id === entry.room.attachedTo && other.room.floor === entry.room.floor);
+    const edge = owner ? sharedEdge(owner.rect, entry.rect) : null;
+    if (edge && edge.length >= 3) continue;
+    const taken = new Set(placed.filter((other) => other !== entry && other.room.type === entry.room.type).map((other) => retargeted.get(other.room.id) || other.room.attachedTo));
+    const neighbour = placed
+      .filter((other) => other.room.floor === entry.room.floor && SLEEPERS.includes(other.room.type) && (sharedEdge(other.rect, entry.rect)?.length ?? 0) >= 3)
+      .sort((a, b) => Number(taken.has(a.room.id)) - Number(taken.has(b.room.id)))[0];
+    if (neighbour) retargeted.set(entry.room.id, neighbour.room.id);
+  }
+  retargeted.forEach((anchorId, roomId) => {
+    const entry = placed.find((other) => other.room.id === roomId)!;
+    const previous = entry.room.attachedTo;
+    entry.room.attachedTo = anchorId;
+    entry.room.relationships = (entry.room.relationships || []).map((rel) => (rel.target === previous && ['ATTACHED_TO', 'CONNECTED_TO', 'ADJACENT_TO'].includes(rel.type) ? { ...rel, target: anchorId } : rel));
+  });
+
   // A room squeezed below a usable size means the programme does not fit: say so rather than draw it.
   const squeezed = placed.filter((p) => !p.room.derived && p.room.type !== 'void' && (Math.min(p.rect.w, p.rect.d) < spec(p.room).minSide - 0.5 || p.rect.w * p.rect.d < spec(p.room).minArea * 0.85));
   if (squeezed.length) {
@@ -705,7 +741,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
       ? Math.abs(w.y1 - y) < 0.05 && Math.abs(w.y2 - y) < 0.05 && Math.min(w.x1, w.x2) - 0.05 <= x && Math.max(w.x1, w.x2) + 0.05 >= x
       : Math.abs(w.x1 - x) < 0.05 && Math.abs(w.x2 - x) < 0.05 && Math.min(w.y1, w.y2) - 0.05 <= y && Math.max(w.y1, w.y2) + 0.05 >= y));
     return {
-      id: op.id, type: op.type, wallId: wall?.id, x, y, width: op.widthFt, label: op.label, swingDirection: op.swingDirection,
+      id: op.id, type: op.type, wallId: wall?.id, x, y, width: op.widthFt, label: op.label, swingDirection: op.swingDirection, hinge: op.hinge, swingSide: op.swingSide,
       floorLevel: op.floorLevel, orientation: op.orientation, connects: op.connects, isExterior: op.isExterior
     };
   });
@@ -721,7 +757,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   const stairs: StaircaseDetails[] = stairBase
     ? [{
         id: 'stair-1', location: `${program.stairSide === 'left' ? 'Left' : 'Right'} side of the circulation zone`, floorLevel: 0, topFloorLevel: floors - 1,
-        x: pctX(originX + stairBase.x), y: pctY(originY + stairBase.y), width: pctX(stairBase.w), height: pctY(stairBase.d), type: 'dog_legged'
+        x: pctX(originX + stairBase.x), y: pctY(originY + stairBase.y), width: pctX(stairBase.w), height: pctY(stairBase.d), type: 'dog_legged', footSide: opened.stairFoot
       }]
     : [];
 

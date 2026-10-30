@@ -1,5 +1,6 @@
 import { FloorPlanOpening, RoomRelationship, RoomType, SpecialMode } from '@/types/architectural';
-import { ExteriorSegment, PlanCell, exteriorSegments, planCompass, round2, sharedEdge } from '@/lib/geometry/planGeometry';
+import { ExteriorSegment, PlanCell, SharedEdge, exteriorSegments, planCompass, round2, sharedEdge } from '@/lib/geometry/planGeometry';
+import { StairFoot, stairMouthEdge } from '@/lib/geometry/stairGeometry';
 import { ROOM_TYPE_SPECS, isBedroomType } from './roomTypes';
 
 export interface OpeningCell extends PlanCell {
@@ -19,6 +20,8 @@ export interface SolvedOpening {
   connects: string[];
   label: string;
   swingDirection?: FloorPlanOpening['swingDirection'];
+  hinge?: 'start' | 'end';
+  swingSide?: 1 | -1;
   isExterior: boolean;
 }
 
@@ -28,6 +31,8 @@ export interface OpeningSolution {
   features: Map<string, string[]>;
   unreachable: string[];
   notes: string[];
+  /** The end of the stair cell where the stair is entered; shared by 2D, 3D and the door solver. */
+  stairFoot: StairFoot;
 }
 
 /** Rooms a bedroom may give private access to. */
@@ -42,7 +47,44 @@ const OUTDOOR: RoomType[] = ['courtyard', 'terrace', 'balcony'];
 /** Compass preference for openings in warm climates: lower is cooler / better. */
 const COMPASS_HEAT: Record<string, number> = { N: 0, NE: 0, E: 1, NW: 2, SE: 2, S: 3, W: 5, SW: 5 };
 
+/** How naturally a room receives a door leaf: higher swings into it. The entry porch, outdoors and the stair never do. */
+const RECEIVES_SWING: Partial<Record<RoomType, number>> = {
+  entrance: -1, courtyard: -2, terrace: -2, balcony: -2, parking: -2, stair: -2, passage: 0,
+  living: 1, lounge: 1, dining: 1, kitchen: 2, utility: 3, store: 3, puja: 3, study: 3,
+  master_bedroom: 4, bedroom: 4, guest_room: 4, dressing: 5, bathroom: 5
+};
+/** Wall clearance kept between neighbouring openings and from room corners (ft). */
+const OPENING_GAP = 0.4;
+const CORNER_CLEARANCE = 0.5;
+
 const hubPriority = (type: RoomType) => ROOM_TYPE_SPECS[type].hubPriority;
+
+/**
+ * Picks the end of the stair cell where it is stepped on. Doors can only open into that landing, so the
+ * end whose neighbours are living space (rather than bedrooms or bathrooms) on every floor wins.
+ */
+function chooseStairFoot(cells: OpeningCell[]): StairFoot {
+  const stairs = cells.filter((cell) => cell.type === 'stair');
+  const costOf = (type: RoomType) => (hubPriority(type) ? (type === 'kitchen' ? 9 : hubPriority(type)!) : isBedroomType(type) || type === 'guest_room' ? 12 : 30);
+  let best: StairFoot = 'front';
+  let bestCost = Infinity;
+  for (const foot of ['front', 'rear'] as StairFoot[]) {
+    let total = 0;
+    for (const stair of stairs) {
+      let floorBest = 40;
+      for (const other of cells) {
+        if (other.floor !== stair.floor || other.id === stair.id || NOT_ROOMS.includes(other.type) || OUTDOOR.includes(other.type)) continue;
+        if (stairMouthEdge(stair.rect, other.rect, foot)) floorBest = Math.min(floorBest, costOf(other.type));
+      }
+      total += floorBest;
+    }
+    if (total < bestCost - 1e-9) {
+      bestCost = total;
+      best = foot;
+    }
+  }
+  return best;
+}
 const pairIs = (a: RoomType, b: RoomType, list: [RoomType, RoomType][]) => list.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
 
 /**
@@ -53,6 +95,19 @@ const pairIs = (a: RoomType, b: RoomType, list: [RoomType, RoomType][]) => list.
 export function solveOpenings(
   cells: OpeningCell[],
   context: { floors: number; orientation: string; modes: SpecialMode[] }
+): OpeningSolution {
+  const preferred = chooseStairFoot(cells);
+  const first = solveWithFoot(cells, context, preferred);
+  if (!cells.some((cell) => cell.type === 'stair') || first.unreachable.length === 0) return first;
+  // The stair can be entered from only one end; if that end strands a room, the other end may serve better.
+  const other = solveWithFoot(cells, context, preferred === 'front' ? 'rear' : 'front');
+  return other.unreachable.length < first.unreachable.length ? other : first;
+}
+
+function solveWithFoot(
+  cells: OpeningCell[],
+  context: { floors: number; orientation: string; modes: SpecialMode[] },
+  stairFoot: StairFoot
 ): OpeningSolution {
   const openings: SolvedOpening[] = [];
   const connections = new Map<string, Set<string>>();
@@ -75,12 +130,40 @@ export function solveOpenings(
     const walkable = floorCells.filter((cell) => !NOT_ROOMS.includes(cell.type));
     const byId = new Map(floorCells.map((cell) => [cell.id, cell]));
     const doorPairs = new Set<string>();
-    const usedWallSpots: { orientation: string; at: number; pos: number }[] = [];
+    /** Every opening placed on this floor, so no two share the same stretch of wall. */
+    const spans = new Map<string, { orientation: string; at: number; from: number; to: number }>();
+    const clash = (orientation: string, at: number, from: number, to: number, ignore?: string) =>
+      Array.from(spans.entries()).some(([id, span]) => id !== ignore && span.orientation === orientation && Math.abs(span.at - at) < 0.15 && from < span.to + OPENING_GAP && to > span.from - OPENING_GAP);
+    /** First free centre along a wall run, trying the preferred centres and then sweeping the run. */
+    const slotFor = (orientation: string, at: number, start: number, end: number, width: number, prefer: number[], ignore?: string): number | null => {
+      const lo = start + width / 2 + Math.min(CORNER_CLEARANCE, Math.max(0, (end - start - width) / 2));
+      const hi = end - width / 2 - Math.min(CORNER_CLEARANCE, Math.max(0, (end - start - width) / 2));
+      const candidates = [...prefer, ...Array.from({ length: Math.max(0, Math.floor((hi - lo) / 0.5)) + 1 }, (_, i) => lo + i * 0.5)];
+      for (const c of candidates) {
+        const center = Math.min(hi, Math.max(lo, c));
+        if (!clash(orientation, at, center - width / 2, center + width / 2, ignore)) return center;
+      }
+      return null;
+    };
+    const reserve = (id: string, orientation: string, at: number, center: number, width: number) =>
+      spans.set(id, { orientation, at, from: center - width / 2, to: center + width / 2 });
+    const edgeFor = (a: OpeningCell, b: OpeningCell): SharedEdge | null => {
+      const stair = a.type === 'stair' && b.type !== 'stair' ? a : b.type === 'stair' && a.type !== 'stair' ? b : null;
+      if (!stair) return sharedEdge(a.rect, b.rect);
+      return stairMouthEdge(stair.rect, (stair === a ? b : a).rect, stairFoot);
+    };
+    /** The room a door leaf swings into, and which side of the wall that is. */
+    const swingInto = (a: OpeningCell, b: OpeningCell, edge: Pick<SharedEdge, 'orientation' | 'at'>): { receiver: OpeningCell; side: 1 | -1 } => {
+      const score = (cell: OpeningCell) => RECEIVES_SWING[cell.type] ?? 1;
+      const receiver = score(a) !== score(b) ? (score(a) > score(b) ? a : b) : a.rect.w * a.rect.d <= b.rect.w * b.rect.d ? a : b;
+      const lead = edge.orientation === 'horizontal' ? receiver.rect.y : receiver.rect.x;
+      return { receiver, side: lead >= edge.at - 0.05 ? 1 : -1 };
+    };
 
     const addDoor = (a: OpeningCell, b: OpeningCell): boolean => {
       const key = [a.id, b.id].sort().join('|');
       if (doorPairs.has(key)) return true;
-      const edge = sharedEdge(a.rect, b.rect);
+      const edge = edgeFor(a, b);
       if (!edge || edge.length < 2.5) return false;
       if (OUTDOOR.includes(a.type) && OUTDOOR.includes(b.type)) {
         // Two open-air spaces simply run into each other: there is no wall to put a door in.
@@ -93,20 +176,37 @@ export function solveOpenings(
       const type: SolvedOpening['type'] = outdoor ? 'sliding_glass' : pairIs(a.type, b.type, OPEN_PLAN_PAIRS) ? 'archway' : 'door';
       const wanted = type === 'sliding_glass' ? 5 : type === 'archway' ? 4 : bath ? (lifeStage ? 3 : 2.5) : lifeStage ? 3.5 : 3;
       const widthFt = round2(Math.min(wanted, edge.length - 0.5));
+      const { receiver, side } = swingInto(a, b, edge);
+      // A leaf is tucked toward the room corner it can fold back against; openings without a leaf sit mid-wall.
+      const mid = (edge.start + edge.end) / 2;
+      let prefer = [mid];
+      if (type === 'door' && edge.length >= widthFt + 3) {
+        const recStart = edge.orientation === 'horizontal' ? receiver.rect.x : receiver.rect.y;
+        const recEnd = edge.orientation === 'horizontal' ? receiver.rect.x + receiver.rect.w : receiver.rect.y + receiver.rect.d;
+        const tuck = CORNER_CLEARANCE + 0.4 + widthFt / 2;
+        const atStart = edge.start + tuck;
+        const atEnd = edge.end - tuck;
+        prefer = Math.abs(edge.start - recStart) < 0.1 ? [atStart, atEnd, mid] : Math.abs(edge.end - recEnd) < 0.1 ? [atEnd, atStart, mid] : [mid, atStart, atEnd];
+      }
+      const id = `op-${type === 'door' ? 'door' : type === 'archway' ? 'arch' : 'slide'}-${++counter}`;
+      const center = slotFor(edge.orientation, edge.at, edge.start, edge.end, widthFt, prefer);
+      if (center === null) return false;
+      reserve(id, edge.orientation, edge.at, center, widthFt);
       openings.push({
-        id: `op-${type === 'door' ? 'door' : type === 'archway' ? 'arch' : 'slide'}-${++counter}`,
+        id,
         type,
-        xFt: round2(edge.midX),
-        yFt: round2(edge.midY),
+        xFt: round2(edge.orientation === 'horizontal' ? center : edge.at),
+        yFt: round2(edge.orientation === 'horizontal' ? edge.at : center),
         widthFt,
         orientation: edge.orientation,
         floorLevel: floor,
         connects: [a.id, b.id],
         label: `${a.name} ↔ ${b.name}`,
         swingDirection: type === 'door' ? 'inward_left' : type === 'sliding_glass' ? 'sliding' : undefined,
+        hinge: type === 'door' ? (center - edge.start <= edge.end - center ? 'start' : 'end') : undefined,
+        swingSide: type === 'door' ? side : undefined,
         isExterior: false
       });
-      usedWallSpots.push({ orientation: edge.orientation, at: edge.at, pos: edge.orientation === 'horizontal' ? edge.midX : edge.midY });
       doorPairs.add(key);
       link(a.id, b.id);
       return true;
@@ -166,11 +266,12 @@ export function solveOpenings(
           if (reached.has(to.id) || privateLeaf.has(to.id)) continue; // ensuites open only off their own room
           for (const from of walkable) {
             if (!reached.has(from.id) || !canPassThrough(from, to)) continue;
-            const edge = sharedEdge(from.rect, to.rect);
+            const edge = edgeFor(from, to);
             if (!edge || edge.length < 2.5) continue;
             let score = hubPriority(from.type) || 8;
+            if (from.type === 'stair' && !hubPriority(to.type)) score += 6; // the stair opens onto living space where it can
+            if (to.type === 'bathroom' && (from.type === 'living' || from.type === 'dining' || from.type === 'kitchen')) score += 7;
             if (from.type === 'kitchen' && to.type !== 'utility' && to.type !== 'store') score += 6; // avoid walking through the kitchen
-            if (to.type === 'bathroom' && (from.type === 'living' || from.type === 'dining')) score += 3; // prefer a passage or lobby
             if (to.type === 'kitchen' && from.type === 'living') score += 2; // the kitchen opens off the dining room where it can
             if ((isBedroomType(to.type) || to.type === 'guest_room') && from.type === 'living') score += 1.5;
             if (from.type === 'entrance' && to.type !== 'living' && to.type !== 'lounge') score += 3;
@@ -192,26 +293,44 @@ export function solveOpenings(
     if (floor === 0 && root) {
       const porchDoor = root.type === 'entrance' ? openings.find((op) => op.floorLevel === 0 && op.connects.includes(root.id) && op.connects.length === 2) : undefined;
       if (porchDoor) {
+        // The porch door becomes the main entrance: wider, centred where the wall allows, swinging into the house.
+        spans.delete(porchDoor.id);
         porchDoor.id = 'op-main';
         porchDoor.type = 'door';
         porchDoor.label = 'Main Entrance';
         porchDoor.isExterior = true;
         porchDoor.swingDirection = 'inward_left';
-        porchDoor.widthFt = lifeStage ? 4 : 3.5;
+        const a = byId.get(porchDoor.connects[0])!;
+        const b = byId.get(porchDoor.connects[1])!;
+        const edge = edgeFor(a, b);
+        const wide = round2(Math.min(lifeStage ? 4 : 3.5, (edge?.length ?? porchDoor.widthFt) - 0.5));
+        const center = edge ? slotFor(edge.orientation, edge.at, edge.start, edge.end, wide, [(edge.start + edge.end) / 2]) : null;
+        if (edge && center !== null) {
+          porchDoor.widthFt = wide;
+          if (edge.orientation === 'horizontal') porchDoor.xFt = round2(center);
+          else porchDoor.yFt = round2(center);
+          porchDoor.hinge = center - edge.start <= edge.end - center ? 'start' : 'end';
+          reserve('op-main', edge.orientation, edge.at, center, wide);
+        } else {
+          reserve('op-main', porchDoor.orientation, porchDoor.orientation === 'horizontal' ? porchDoor.yFt : porchDoor.xFt, porchDoor.orientation === 'horizontal' ? porchDoor.xFt : porchDoor.yFt, porchDoor.widthFt);
+        }
         if (lifeStage) addFeature(root.id, 'Step-free 4 ft wide main entrance');
       } else {
         const ext = exteriorSegments(root, floorCells).filter((seg) => !seg.facesOpenSpace && seg.length >= 3.5);
         const front = ext.filter((seg) => seg.side === 'front').sort((x, y) => y.length - x.length)[0] || ext.sort((x, y) => y.length - x.length)[0];
-        if (front) {
-          const mid = (front.start + front.end) / 2;
+        const wide = lifeStage ? 4 : 3.5;
+        const center = front ? slotFor(front.orientation, front.at, front.start, front.end, wide, [(front.start + front.end) / 2]) : null;
+        if (front && center !== null) {
+          reserve('op-main', front.orientation, front.at, center, wide);
+          const lead = front.orientation === 'horizontal' ? root.rect.y : root.rect.x;
           openings.push({
             id: 'op-main', type: 'door',
-            xFt: round2(front.orientation === 'horizontal' ? mid : front.at),
-            yFt: round2(front.orientation === 'horizontal' ? front.at : mid),
-            widthFt: lifeStage ? 4 : 3.5, orientation: front.orientation, floorLevel: 0, connects: [root.id],
-            label: 'Main Entrance', swingDirection: 'inward_left', isExterior: true
+            xFt: round2(front.orientation === 'horizontal' ? center : front.at),
+            yFt: round2(front.orientation === 'horizontal' ? front.at : center),
+            widthFt: wide, orientation: front.orientation, floorLevel: 0, connects: [root.id],
+            label: 'Main Entrance', swingDirection: 'inward_left', isExterior: true,
+            hinge: center - front.start <= front.end - center ? 'start' : 'end', swingSide: lead >= front.at - 0.05 ? 1 : -1
           });
-          usedWallSpots.push({ orientation: front.orientation, at: front.at, pos: mid });
           if (lifeStage) addFeature(root.id, 'Step-free 4 ft wide main entrance');
         } else {
           notes.push('The entry room has no external wall for a main door.');
@@ -224,8 +343,7 @@ export function solveOpenings(
       const typeSpec = ROOM_TYPE_SPECS[cell.type];
       const wantsLight = typeSpec.habitable || cell.type === 'bathroom' || cell.type === 'stair';
       if (!wantsLight) continue;
-      const free = (seg: ExteriorSegment) => !usedWallSpots.some((spot) => spot.orientation === seg.orientation && Math.abs(spot.at - seg.at) < 0.1 && spot.pos > seg.start && spot.pos < seg.end);
-      const candidates = exteriorSegments(cell, floorCells).filter((seg) => seg.length >= 3 && free(seg));
+      const candidates = exteriorSegments(cell, floorCells).filter((seg) => seg.length >= 3);
       if (!candidates.length) continue; // reported by validation
       const heat = (seg: ExteriorSegment) => COMPASS_HEAT[compass[seg.side]] ?? 2;
       candidates.sort((a, b) => (climate ? heat(a) - heat(b) : 0) || b.length - a.length);
@@ -237,18 +355,28 @@ export function solveOpenings(
         sidesUsed.add(seg.side);
         const hot = climate && heat(seg) >= 5;
         const base = cell.type === 'bathroom' ? 2 : cell.type === 'living' ? 6 : cell.type === 'kitchen' || cell.type === 'stair' ? 3.5 : 4;
-        const widthFt = round2(Math.min(hot ? Math.min(base, 2.5) : base, seg.length - 1));
+        let widthFt = round2(Math.min(hot ? Math.min(base, 2.5) : base, seg.length - 1));
         const mid = (seg.start + seg.end) / 2;
+        let centre = slotFor(seg.orientation, seg.at, seg.start, seg.end, widthFt, [mid]);
+        if (centre === null && widthFt > 2.5) {
+          widthFt = round2(Math.max(2, widthFt * 0.7));
+          centre = slotFor(seg.orientation, seg.at, seg.start, seg.end, widthFt, [mid]);
+        }
+        if (centre === null) {
+          sidesUsed.delete(seg.side);
+          continue;
+        }
         const direction = compass[seg.side];
+        const windowId = `op-win-${++counter}`;
+        reserve(windowId, seg.orientation, seg.at, centre, widthFt);
         openings.push({
-          id: `op-win-${++counter}`, type: 'window',
-          xFt: round2(seg.orientation === 'horizontal' ? mid : seg.at),
-          yFt: round2(seg.orientation === 'horizontal' ? seg.at : mid),
+          id: windowId, type: 'window',
+          xFt: round2(seg.orientation === 'horizontal' ? centre : seg.at),
+          yFt: round2(seg.orientation === 'horizontal' ? seg.at : centre),
           widthFt, orientation: seg.orientation, floorLevel: floor, connects: [cell.id],
           label: cell.type === 'bathroom' ? `${cell.name} ventilator (${direction})` : `${cell.name} window (${direction}${seg.facesOpenSpace ? ', courtyard side' : ''})`,
           isExterior: true
         });
-        usedWallSpots.push({ orientation: seg.orientation, at: seg.at, pos: mid });
         if (hot) addFeature(cell.id, `Reduced ${direction} glazing to limit afternoon heat`);
       }
       if (climate && typeSpec.habitable) {
@@ -257,5 +385,5 @@ export function solveOpenings(
     }
   }
 
-  return { openings, connections, features, unreachable, notes };
+  return { openings, connections, features, unreachable, notes, stairFoot };
 }

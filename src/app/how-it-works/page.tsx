@@ -1,11 +1,11 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-import Navbar from '@/components/navigation/Navbar';
-import {
-  Upload, MapPin, Sliders, Palette, Layers, Box, Sparkles, ArrowRight, CheckCircle2, ShieldCheck
-} from 'lucide-react';
+import MotionPage from '@/components/marketing/site/MotionPage';
+import Blossom from '@/components/motion/Blossom';
+import CircleButton from '@/components/motion/CircleButton';
+import SplitText from '@/components/motion/SplitText';
+import { Upload, MapPin, Sliders, Palette, Layers, Box, Sparkles } from 'lucide-react';
 
 export default function HowItWorksPage() {
   const steps = [
@@ -35,7 +35,7 @@ export default function HowItWorksPage() {
       title: 'Choose Special Modes & Style',
       icon: Palette,
       desc: 'Select from Climate-Adaptive, Life-Stage, Budget-First, or Renovation modes, and select your primary architectural style (e.g., Kerala Traditional, Modern, Minimalist).',
-      details: ['Multi-Mode Synthesis', 'Design Signature Generation', 'Style-Aware Facade Directives']
+      details: ['Your design priorities', 'Design Signature Generation', 'Style-Aware Facade Directives']
     },
     {
       num: '05',
@@ -61,97 +61,42 @@ export default function HowItWorksPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-stone-900 selection:bg-terracotta-500 selection:text-white">
-      <Navbar />
-
-      {/* Hero */}
-      <section className="border-b border-stone-200 py-16 lg:py-24 bg-[#F4F2EC]/60">
-        <div className="mx-auto max-w-7xl px-6 lg:px-12">
-          <div className="max-w-3xl space-y-4">
-            <span className="font-mono text-xs uppercase tracking-widest text-terracotta-500 font-semibold">
-              The ArchAdapt AI Workflow
-            </span>
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-light text-stone-950 leading-tight">
-              How ArchAdapt AI Engine Works
-            </h1>
-            <p className="font-sans text-base text-stone-600 leading-relaxed max-w-2xl">
-              From site boundaries and location climate to 2D structured floor plans and style-aware 3D previews — discover how our 7-stage generative workflow transforms constraints into living architectural concepts.
-            </p>
-          </div>
-        </div>
+    <MotionPage>
+      <section className="page-hero" data-section="Workflow" data-header="ink">
+        <Blossom branch="c" side="right" className="blossom--page" speed={-20} />
+        <p className="label label--rule">The ArchAdapt AI Workflow</p>
+        <h1 className="display display--sm" data-stretch><SplitText text={'How ArchAdapt AI\nEngine Works'} /></h1>
+        <p className="body" data-fade>
+          From site boundaries and location climate to 2D structured floor plans and style-aware 3D previews — discover how our 7-stage generative workflow transforms constraints into living architectural concepts.
+        </p>
       </section>
 
-      {/* Steps List */}
-      <section className="py-20 mx-auto max-w-7xl px-6 lg:px-12">
-        <div className="space-y-12">
-          {steps.map((s) => {
-            const Icon = s.icon;
-            return (
-              <div
-                key={s.num}
-                className="border border-stone-300 bg-white p-8 lg:p-10 shadow-sm hover:border-stone-900 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-8 group"
-              >
-                <div className="space-y-4 max-w-2xl">
-                  <div className="flex items-center gap-4">
-                    <span className="font-mono text-3xl font-light text-terracotta-500">{s.num}</span>
-                    <div className="flex h-10 w-10 items-center justify-center bg-stone-100 border border-stone-200 text-stone-800 group-hover:bg-stone-900 group-hover:text-stone-50 transition-all">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <h3 className="font-serif text-2xl font-medium text-stone-950">{s.title}</h3>
-                  </div>
-
-                  <p className="font-sans text-sm text-stone-600 leading-relaxed">{s.desc}</p>
-                </div>
-
-                <div className="border-t lg:border-t-0 lg:border-l border-stone-200 pt-6 lg:pt-0 lg:pl-8 space-y-2 font-mono text-xs text-stone-600 shrink-0">
-                  <div className="uppercase tracking-wider font-semibold text-stone-400 text-[10px]">Key Technical Features</div>
-                  {s.details.map((d, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-stone-700">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-terracotta-500 shrink-0" />
-                      <span>{d}</span>
-                    </div>
-                  ))}
-                </div>
+      <section className="page-list" data-section="Stages" data-bg="ivory" data-header="ink">
+        <ol className="row-list">
+          {steps.map((s) => (
+            <li key={s.num} className="row" data-fade>
+              <span className="numeral gold-shimmer">{s.num}</span>
+              <div className="row-main">
+                <h2 className="row-title">{s.title}</h2>
+                <p className="body">{s.desc}</p>
               </div>
-            );
-          })}
-        </div>
-
-        {/* CTA */}
-        <div className="mt-20 border border-stone-300 bg-stone-900 text-stone-50 p-12 text-center space-y-6">
-          <span className="font-mono text-xs uppercase tracking-widest text-terracotta-400 font-semibold">
-            Start Your Project
-          </span>
-          <h2 className="font-serif text-3xl sm:text-4xl font-light">
-            Ready to generate your first adaptive house concept?
-          </h2>
-          <p className="font-sans text-stone-400 text-sm max-w-xl mx-auto leading-relaxed">
-            Enter your plot constraints, choose your preferred design modes and style, and explore endless What-If possibilities.
-          </p>
-          <div className="pt-2">
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center gap-3 bg-terracotta-500 px-8 py-4 font-sans text-xs font-semibold uppercase tracking-widest text-white hover:bg-terracotta-600 transition-all shadow-md"
-            >
-              Start Designing Now
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
+              <div className="row-aside">
+                <p className="label">Key Technical Features</p>
+                <ul>{s.details.map((d) => <li key={d}>{d}</li>)}</ul>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-stone-800 bg-stone-950 text-stone-400 py-12">
-        <div className="mx-auto max-w-7xl px-6 lg:px-12 flex flex-col md:flex-row items-center justify-between gap-6 font-mono text-xs text-stone-500">
-          <div>© 2026 ArchAdapt AI Studio • Core Generative Architectural Engine</div>
-          <div className="flex items-center gap-6">
-            <Link href="/how-it-works" className="hover:text-stone-300">How It Works</Link>
-            <Link href="/styles" className="hover:text-stone-300">Styles</Link>
-            <Link href="/modes" className="hover:text-stone-300">Modes</Link>
-            <Link href="/dashboard" className="hover:text-stone-300">Dashboard</Link>
-          </div>
+      <section className="page-callout" data-section="Begin" data-bg="sky" data-header="ink">
+        <div>
+          <p className="label">Start Your Project</p>
+          <h2 className="callout-title" data-stretch><SplitText text="Ready to generate your first adaptive house concept?" /></h2>
+          <p className="body" data-fade>Enter your plot constraints, choose your preferred design modes and style, and explore endless What-If possibilities.</p>
         </div>
-      </footer>
-    </div>
+        <CircleButton href="/onboarding" label="Start" ring="Start Designing Now · " />
+      </section>
+    </MotionPage>
   );
 }
