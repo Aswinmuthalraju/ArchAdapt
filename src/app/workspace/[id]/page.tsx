@@ -11,7 +11,7 @@ import ExportMenu from '@/components/workspace/ExportMenu';
 import { analyseDesign, DEFAULT_LIMITS, PlanLimits } from '@/lib/pro/analysis';
 import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare } from 'lucide-react';
 import { Project, FloorPlanVersion, StructuredDesignJSON, WhatIfMessage } from '@/types/architectural';
-import { supabase, authHeaders } from '@/lib/supabase/client';
+import { supabase, authHeaders, getCurrentAppUser, onAppAuthStateChange } from '@/lib/supabase/client';
 import { getUserProjectsFromSupabase, setCurrentVersionInSupabase } from '@/lib/services/projectService';
 import { validateFloorPlan } from '@/lib/design/validateFloorPlan';
 import { checkRenderConsistency } from '@/lib/geometry/buildHouseGeometry';
@@ -74,24 +74,19 @@ export default function WorkspacePage() {
       let signedIn = false;
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
-          router.replace(`/login?next=/workspace/${projectId}`);
-          return;
-        }
-
-        const user = session.user;
-        signedIn = true;
-        try {
-          const projects = await getUserProjectsFromSupabase(user.id);
-          const match = projects.find((p) => p.id === projectId);
-          if (match) found = { ...match, storage: 'supabase' };
-        } catch (err) {
-          console.warn('[Workspace] Supabase load failed, checking this browser:', err);
+        const appUser = await getCurrentAppUser();
+        if (appUser && !appUser.isGuest) {
+          signedIn = true;
+          try {
+            const projects = await getUserProjectsFromSupabase(appUser.id);
+            const match = projects.find((p) => p.id === projectId);
+            if (match) found = { ...match, storage: 'supabase' };
+          } catch (err) {
+            console.warn('[Workspace] Supabase load failed, checking this browser:', err);
+          }
         }
       } catch {
-        router.replace(`/login?next=/workspace/${projectId}`);
-        return;
+        /* check local storage */
       }
 
       if (!found) {

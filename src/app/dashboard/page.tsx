@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/navigation/Navbar';
 import { Plus, MapPin, Trash2, ArrowRight } from 'lucide-react';
 import { Project } from '@/types/architectural';
-import { supabase } from '@/lib/supabase/client';
+import { supabase, getCurrentAppUser } from '@/lib/supabase/client';
 import { getUserProjectsFromSupabase, deleteProjectFromSupabase } from '@/lib/services/projectService';
 
 export default function DashboardPage() {
@@ -32,20 +32,21 @@ export default function DashboardPage() {
       const loaded: Project[] = [];
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
+        const appUser = await getCurrentAppUser();
+        if (!appUser) {
           router.replace('/login');
           return;
         }
 
-        const user = session.user;
         if (!cancelled) setSignedIn(true);
 
-        try {
-          const dbProjects = await getUserProjectsFromSupabase(user.id);
-          loaded.push(...dbProjects.map((project) => ({ ...project, storage: 'supabase' as const })));
-        } catch {
-          if (!cancelled) setLoadError('Your account projects could not be loaded.');
+        if (!appUser.isGuest) {
+          try {
+            const dbProjects = await getUserProjectsFromSupabase(appUser.id);
+            loaded.push(...dbProjects.map((project) => ({ ...project, storage: 'supabase' as const })));
+          } catch {
+            if (!cancelled) setLoadError('Your account projects could not be loaded.');
+          }
         }
       } catch {
         router.replace('/login');

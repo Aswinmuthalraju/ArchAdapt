@@ -3,8 +3,8 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Compass, Lock, Mail, ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, ArrowLeft } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { Compass, Lock, Mail, ArrowRight, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, ArrowLeft, Sparkles } from 'lucide-react';
+import { supabase, getCurrentAppUser, loginAsGuest } from '@/lib/supabase/client';
 import AuthShell from '@/components/auth/AuthShell';
 
 function LoginForm() {
@@ -27,12 +27,17 @@ function LoginForm() {
 
   // If already authenticated, redirect to target
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
+    getCurrentAppUser().then((user) => {
+      if (user) {
         router.replace(nextUrl);
       }
     });
   }, [router, nextUrl]);
+
+  const handleGuestAccess = () => {
+    loginAsGuest(email.trim().split('@')[0] || 'Studio Architect', email.trim() || 'architect@archadapt.local');
+    router.replace(nextUrl);
+  };
 
   // Google OAuth intentionally disabled for the current release.
   // Can be re-enabled after authentication flow is fully verified.
@@ -242,6 +247,24 @@ function LoginForm() {
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}
+                </button>
+
+                <div className="relative my-5 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-stone-200" />
+                  </div>
+                  <span className="relative bg-[#FBF8F4] px-3 text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+                    Or Instant Studio Access
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGuestAccess}
+                  className="flex w-full items-center justify-center gap-2 border border-stone-900 bg-white py-3 px-4 text-xs font-semibold text-stone-900 hover:bg-stone-900 hover:text-gold-200 transition-all shadow-sm"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-gold-500" />
+                  Continue as Studio Guest
                 </button>
               </form>
 

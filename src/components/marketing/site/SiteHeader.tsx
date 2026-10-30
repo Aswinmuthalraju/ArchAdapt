@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { RotatingBadge } from '@/components/brand/Logo';
 import { lenisRef } from '@/lib/motion';
-import { supabase } from '@/lib/supabase/client';
+import { onAppAuthStateChange } from '@/lib/supabase/client';
 
 const PRIMARY = [
   { name: 'Try it', href: '/onboarding' },
@@ -26,9 +26,8 @@ export default function SiteHeader() {
   const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSignedIn(Boolean(session?.user)));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSignedIn(Boolean(session?.user)));
-    return () => subscription.unsubscribe();
+    const unsubscribe = onAppAuthStateChange((user) => setSignedIn(Boolean(user)));
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {

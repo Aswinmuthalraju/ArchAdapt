@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, FolderKanban, Menu, X } from 'lucide-react';
 import AuthModal from '@/components/auth/AuthModal';
 import { LogoMark, Wordmark } from '@/components/brand/Logo';
-import { supabase } from '@/lib/supabase/client';
+import { onAppAuthStateChange, logoutApp, AppUser } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
   { name: 'How it works', href: '/how-it-works' },
@@ -19,25 +19,21 @@ export default function Navbar({ tone = 'light' }: { tone?: 'light' | 'dark' }) 
   const router = useRouter();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string; avatarUrl?: string } | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const dark = tone === 'dark';
 
   useEffect(() => {
-    const toUser = (session: { user?: { user_metadata?: Record<string, string>; email?: string } } | null) =>
-      session?.user
-        ? { name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Architect', email: session.user.email || '', avatarUrl: session.user.user_metadata?.avatar_url }
-        : null;
-
-    supabase.auth.getSession().then(({ data: { session } }) => setUser(toUser(session)));
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(toUser(session));
-      if (!session?.user && event === 'SIGNED_OUT' && (pathname === '/dashboard' || pathname?.startsWith('/workspace'))) router.replace('/login');
+    const unsubscribe = onAppAuthStateChange((currentUser) => {
+      setUser(currentUser);
+      if (!currentUser && (pathname === '/dashboard' || pathname?.startsWith('/workspace'))) {
+        router.replace('/login');
+      }
     });
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, [pathname, router]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await logoutApp();
     setUser(null);
     router.replace('/login');
   };

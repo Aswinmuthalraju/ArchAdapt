@@ -4,8 +4,8 @@ import { describeSignUpError } from '@/lib/supabase/authErrors';
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Compass, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle, ShieldCheck } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { Compass, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle, ShieldCheck, Sparkles } from 'lucide-react';
+import { supabase, getCurrentAppUser, loginAsGuest } from '@/lib/supabase/client';
 import AuthShell from '@/components/auth/AuthShell';
 
 function RegisterForm() {
@@ -21,15 +21,21 @@ function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
   // If already authenticated, redirect to target
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
+    getCurrentAppUser().then((user) => {
+      if (user) {
         router.replace(nextUrl);
       }
     });
   }, [router, nextUrl]);
+
+  const handleGuestAccess = () => {
+    loginAsGuest(name.trim() || 'Studio Architect', email.trim() || 'architect@archadapt.local');
+    router.replace(nextUrl);
+  };
 
   // Google OAuth intentionally disabled for the current release.
   // Can be re-enabled after authentication flow is fully verified.
@@ -86,6 +92,8 @@ function RegisterForm() {
 
       if (error) {
         console.warn('[auth] sign-up failed:', error.code, error.status, error.message);
+        const rateLimit = error.status === 429 || (error as any).code === 'over_email_send_rate_limit';
+        setIsRateLimited(rateLimit);
         setErrorMessage(describeSignUpError(error));
         return;
       }
@@ -139,10 +147,27 @@ function RegisterForm() {
           {errorMessage && (
             <div
               role="alert"
-              className="mb-6 flex items-start gap-3 border border-red-200 bg-red-50/80 p-3.5 text-xs text-red-800"
+              className="mb-6 border border-red-200 bg-red-50/90 p-4 text-xs text-red-900 space-y-2.5"
             >
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
-              <span className="font-sans font-medium">{errorMessage}</span>
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-600 mt-0.5" />
+                <span className="font-sans font-medium">{errorMessage}</span>
+              </div>
+              {isRateLimited && (
+                <div className="pt-2 border-t border-red-200 text-stone-700">
+                  <p className="text-[11px] leading-relaxed">
+                    <strong>Tip:</strong> In Supabase, the built-in email service is limited to 3 emails/hour. To enable instant registration without confirmation emails, toggle <strong>Confirm email</strong> to <strong>OFF</strong> in your <strong>Supabase Dashboard → Authentication → Providers → Email</strong>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleGuestAccess}
+                    className="mt-3 flex items-center justify-center gap-2 w-full bg-plum-900 py-2.5 px-4 text-xs font-semibold text-gold-200 hover:bg-plum-800 transition-colors"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-gold-300" />
+                    Bypass & Continue as Studio Guest
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -275,6 +300,24 @@ function RegisterForm() {
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
+            </button>
+
+            <div className="relative my-5 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-stone-200" />
+              </div>
+              <span className="relative bg-[#FBF8F4] px-3 text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+                Or Instant Studio Access
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGuestAccess}
+              className="flex w-full items-center justify-center gap-2 border border-stone-900 bg-white py-3 px-4 text-xs font-semibold text-stone-900 hover:bg-stone-900 hover:text-gold-200 transition-all shadow-sm"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-gold-500" />
+              Continue as Studio Guest
             </button>
           </form>
 

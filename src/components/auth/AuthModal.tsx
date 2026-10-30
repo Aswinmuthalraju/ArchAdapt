@@ -2,13 +2,13 @@
 
 import { describeSignUpError } from '@/lib/supabase/authErrors';
 import React, { useState } from 'react';
-import { X, Lock, UserPlus, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { X, Lock, UserPlus, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { supabase, loginAsGuest, AppUser } from '@/lib/supabase/client';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAuthSuccess: (user: { name: string; email: string }) => void;
+  onAuthSuccess: (user: AppUser) => void;
 }
 
 export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
@@ -22,6 +22,12 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleGuestAccess = () => {
+    const guest = loginAsGuest(name.trim() || 'Studio Architect', email.trim() || 'architect@archadapt.local');
+    onAuthSuccess(guest);
+    onClose();
+  };
 
   // Google OAuth intentionally disabled for the current release.
   // Can be re-enabled after authentication flow is fully verified.
@@ -76,7 +82,12 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
 
       if (data.session && data.user) {
         const userName = data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'Architect';
-        onAuthSuccess({ name: userName, email: data.user.email || emailTrimmed });
+        onAuthSuccess({
+          id: data.user.id,
+          name: userName,
+          email: data.user.email || emailTrimmed,
+          isGuest: false
+        });
         onClose();
       } else {
         setErrorMessage('Unable to establish session. Please try again.');
@@ -134,8 +145,13 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         return;
       }
 
-      if (data.session) {
-        onAuthSuccess({ name: cleanName, email: emailTrimmed });
+      if (data.session && data.user) {
+        onAuthSuccess({
+          id: data.user.id,
+          name: cleanName,
+          email: emailTrimmed,
+          isGuest: false
+        });
         onClose();
         return;
       }
@@ -146,8 +162,13 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
         password
       });
 
-      if (signInRes.data?.session) {
-        onAuthSuccess({ name: cleanName, email: emailTrimmed });
+      if (signInRes.data?.session && signInRes.data.user) {
+        onAuthSuccess({
+          id: signInRes.data.user.id,
+          name: cleanName,
+          email: emailTrimmed,
+          isGuest: false
+        });
         onClose();
       } else {
         setErrorMessage('Account created. Please log in with your credentials.');
@@ -388,7 +409,18 @@ export default function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalP
           </form>
         )}
 
-        <div className="mt-6 flex items-center justify-center gap-1.5 text-[11px] text-stone-500 ">
+        <div className="mt-4 pt-4 border-t border-stone-200">
+          <button
+            type="button"
+            onClick={handleGuestAccess}
+            className="flex w-full items-center justify-center gap-2 border border-stone-900 bg-white py-2.5 px-3 text-xs font-semibold text-stone-900 hover:bg-stone-900 hover:text-gold-200 transition-all"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-gold-500" />
+            Continue as Studio Guest
+          </button>
+        </div>
+
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-stone-500 ">
           <ShieldCheck className="h-3.5 w-3.5 text-sage-500" />
           Secured by Supabase Row Level Security
         </div>

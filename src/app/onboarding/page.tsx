@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { SiteInfo, LocationInfo, DesignRequirements, SpecialMode, ArchitecturalStyle, Project } from '@/types/architectural';
 import { createProjectInSupabase } from '@/lib/services/projectService';
-import { supabase } from '@/lib/supabase/client';
+import { supabase, onAppAuthStateChange, AppUser } from '@/lib/supabase/client';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -18,20 +18,17 @@ export default function OnboardingPage() {
   const [loadingStage, setLoadingStage] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [generationError, setGenerationError] = useState<{ title: string; message: string; details: string[]; canUseLocalEngine: boolean; canRetry: boolean } | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
 
   // File Upload State
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string; previewUrl: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    const unsubscribe = onAppAuthStateChange((currentUser) => {
+      setUser(currentUser);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
