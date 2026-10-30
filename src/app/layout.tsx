@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Bodoni_Moda, Jost, Pinyon_Script } from 'next/font/google';
+import { AuthProvider } from '@/lib/auth/AuthProvider';
 import './globals.css';
 
 const sans = Jost({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
@@ -30,7 +31,7 @@ export default function RootLayout({
         {/* Lets CSS hold intro states before hydration, so animated elements never flash. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }} />
       </head>
-      <body className="font-sans bg-ivory text-ink antialiased">{children}</body>
+      <body className="font-sans bg-ivory text-ink antialiased"><AuthProvider>{children}</AuthProvider></body>
     </html>
   );
 }

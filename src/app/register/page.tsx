@@ -5,13 +5,15 @@ import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Compass, UserPlus, Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle, ShieldCheck, Sparkles } from 'lucide-react';
-import { supabase, getCurrentAppUser, loginAsGuest } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured, loginAsGuest } from '@/lib/supabase/client';
+import { useAuthGuard } from '@/lib/auth/AuthProvider';
+import { safeNext } from '@/lib/auth/guard';
 import AuthShell from '@/components/auth/AuthShell';
 
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get('next') || '/dashboard';
+  const nextUrl = safeNext(searchParams.get('next'));
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -23,14 +25,8 @@ function RegisterForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
 
-  // If already authenticated, redirect to target
-  useEffect(() => {
-    getCurrentAppUser().then((user) => {
-      if (user) {
-        router.replace(nextUrl);
-      }
-    });
-  }, [router, nextUrl]);
+  // Signed-in people (including guests) are moved on by the shared guard.
+  useAuthGuard();
 
   const handleGuestAccess = () => {
     loginAsGuest(name.trim() || 'Studio Architect', email.trim() || 'architect@archadapt.local');
@@ -72,6 +68,10 @@ function RegisterForm() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    if (!isSupabaseConfigured) {
+      setErrorMessage('The sign-in service is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local and restart the server, or continue as a Studio Guest.');
+      return;
+    }
 
     if (!validateForm()) return;
 

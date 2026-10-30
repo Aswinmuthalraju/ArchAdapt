@@ -12,6 +12,26 @@ type SceneProps = { state: ShowcaseState; reducedMotion: boolean; onSpace: (spac
 
 const C = { plaster: '#e6e2d7', stone: '#b7b3a3', wood: '#8f6443', frame: '#3b4038', leaf: '#667553', grass: '#84906b', fabric: '#e3d5bb' };
 
+const FLOWER_COLORS = ['#E0218A', '#F472B6', '#FBCFE8', '#FDA4AF', '#BE185D', '#EA4FA2'];
+
+/** Sculpted 5-lobed blossom geometry with organic radial petal clefts */
+function build5PetalGeometry(radius = 0.16): THREE.ShapeGeometry {
+  const shape = new THREE.Shape();
+  const steps = 40;
+  for (let i = 0; i <= steps; i++) {
+    const theta = (i / steps) * Math.PI * 2;
+    const wave = Math.cos(5 * theta);
+    const lobe = wave > 0 ? Math.pow(wave, 0.72) : 0;
+    const r = radius * (0.28 + 0.72 * lobe);
+    const x = Math.cos(theta) * r;
+    const y = Math.sin(theta) * r;
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
 function Block({ at, size, color = C.plaster, roughness = .85, ...props }: { at: V3; size: V3; color?: string; roughness?: number } & Partial<JSX.IntrinsicElements['mesh']>) {
   return <mesh position={at} castShadow receiveShadow {...props}><boxGeometry args={size} /><meshStandardMaterial color={color} roughness={roughness} /></mesh>;
 }
@@ -20,16 +40,101 @@ function Glass({ at, size, evening }: { at: V3; size: V3; evening: boolean }) {
   return <mesh position={at}><boxGeometry args={size} /><meshPhysicalMaterial color={evening ? '#c49a60' : '#b6c8bd'} transparent opacity={evening ? .35 : .22} roughness={.12} metalness={.25} depthWrite={false} side={THREE.DoubleSide} /></mesh>;
 }
 
+/** Flowering blossom tree with distinct 5-petaled flowers, golden pistils, lush foliage, and fallen petals */
 function Tree({ at, scale = 1, seed = 0 }: { at: V3; scale?: number; seed?: number }) {
-  const leaves = useMemo(() => Array.from({ length: 42 }, (_, i) => {
+  const flowerGeo = useMemo(() => build5PetalGeometry(0.18), []);
+  useEffect(() => () => flowerGeo.dispose(), [flowerGeo]);
+
+  // Blossoming canopy flowers
+  const blossoms = useMemo(() => Array.from({ length: 48 }, (_, i) => {
     const a = i * 2.39996 + seed;
-    const radius = .38 + (i % 5) * .14;
-    return { at: [Math.cos(a) * radius, 2.15 + Math.sin(i * 1.7 + seed) * .48, Math.sin(a) * radius] as V3, scale: [.27 + (i % 3) * .045, .13 + (i % 4) * .035, .26] as V3 };
+    const rad = 0.42 + (i % 6) * 0.16;
+    const y = 2.15 + Math.sin(i * 1.5 + seed) * 0.52;
+    const pos: V3 = [Math.cos(a) * rad, y, Math.sin(a) * rad];
+    const rot: V3 = [
+      Math.sin(i * 1.3) * 0.6 + 0.2,
+      a + Math.PI / 2,
+      Math.cos(i * 1.7) * 0.4
+    ];
+    const s = 0.85 + (i % 4) * 0.18;
+    const color = FLOWER_COLORS[i % FLOWER_COLORS.length];
+    return { pos, rot, s, color };
   }), [seed]);
+
+  // Deep foliage accents underneath flowers
+  const foliage = useMemo(() => Array.from({ length: 18 }, (_, i) => {
+    const a = i * 1.8 + seed;
+    const rad = 0.35 + (i % 3) * 0.14;
+    return {
+      pos: [Math.cos(a) * rad, 1.95 + Math.sin(i * 2 + seed) * 0.35, Math.sin(a) * rad] as V3,
+      scale: [0.32, 0.22, 0.32] as V3,
+      rot: [i * 0.5, i * 0.7, i * 0.3] as V3
+    };
+  }), [seed]);
+
+  // Fallen petals resting on the planter surface
+  const fallenPetals = useMemo(() => Array.from({ length: 14 }, (_, i) => {
+    const angle = i * 1.9 + seed;
+    const dist = 0.25 + (i % 5) * 0.22;
+    return {
+      pos: [Math.cos(angle) * dist * 1.4, 0.02, Math.sin(angle) * dist] as V3,
+      rot: [-Math.PI / 2, 0, i * 0.8] as V3,
+      scale: 0.6 + (i % 3) * 0.2,
+      color: FLOWER_COLORS[(i + 1) % FLOWER_COLORS.length]
+    };
+  }), [seed]);
+
   return <group position={at} scale={scale}>
-    <mesh position={[0, 1.05, 0]} castShadow><cylinderGeometry args={[.055, .11, 2.1, 7]} /><meshStandardMaterial color="#73604a" /></mesh>
-    {[0, 1, 2].map(i => <mesh key={i} position={[Math.sin(i * 2) * .2, 1.65, Math.cos(i * 2) * .2]} rotation={[.3 * Math.sin(i * 2), 0, .35 * Math.cos(i * 2)]} castShadow><cylinderGeometry args={[.025, .045, 1, 5]} /><meshStandardMaterial color="#73604a" /></mesh>)}
-    {leaves.map((leaf, i) => <mesh key={i} position={leaf.at} scale={leaf.scale} rotation={[i, i * .7, i * .2]} castShadow><icosahedronGeometry args={[1, 1]} /><meshStandardMaterial color={['#6d7856', '#85906b', '#5a6c4b', '#959a76'][i % 4]} roughness={1} /></mesh>)}
+    {/* Architectural woody trunk */}
+    <mesh position={[0, 1.05, 0]} castShadow>
+      <cylinderGeometry args={[0.05, 0.11, 2.1, 8]} />
+      <meshStandardMaterial color="#5A4632" roughness={0.9} />
+    </mesh>
+
+    {/* Primary and secondary branches */}
+    {[0, 1, 2, 3].map((i) => {
+      const angle = (i * Math.PI) / 2 + 0.3;
+      return (
+        <mesh
+          key={`branch-${i}`}
+          position={[Math.cos(angle) * 0.22, 1.72 + (i % 2) * 0.15, Math.sin(angle) * 0.22]}
+          rotation={[0.35 * Math.sin(angle), 0, 0.38 * Math.cos(angle)]}
+          castShadow
+        >
+          <cylinderGeometry args={[0.022, 0.045, 1.1, 6]} />
+          <meshStandardMaterial color="#5A4632" roughness={0.88} />
+        </mesh>
+      );
+    })}
+
+    {/* Green foliage clusters nestled under blossoms */}
+    {foliage.map((leaf, i) => (
+      <mesh key={`leaf-${i}`} position={leaf.pos} scale={leaf.scale} rotation={leaf.rot} castShadow>
+        <icosahedronGeometry args={[1, 1]} />
+        <meshStandardMaterial color={i % 2 ? '#4D5D3B' : '#3B4D2E'} roughness={0.95} />
+      </mesh>
+    ))}
+
+    {/* Blooming 5-petaled flowers with pistil centers */}
+    {blossoms.map((b, i) => (
+      <group key={`flower-${i}`} position={b.pos} rotation={b.rot} scale={b.s}>
+        <mesh geometry={flowerGeo} castShadow receiveShadow>
+          <meshStandardMaterial color={b.color} roughness={0.6} side={THREE.DoubleSide} />
+        </mesh>
+        <mesh position={[0, 0, 0.012]} castShadow>
+          <sphereGeometry args={[0.04, 8, 8]} />
+          <meshStandardMaterial color="#FDE047" emissive="#F59E0B" emissiveIntensity={0.25} roughness={0.35} />
+        </mesh>
+      </group>
+    ))}
+
+    {/* Fallen petals resting on the surface */}
+    {fallenPetals.map((fp, i) => (
+      <mesh key={`fallen-${i}`} position={fp.pos} rotation={fp.rot} scale={fp.scale}>
+        <circleGeometry args={[0.06, 12]} />
+        <meshStandardMaterial color={fp.color} roughness={0.8} side={THREE.DoubleSide} />
+      </mesh>
+    ))}
   </group>;
 }
 

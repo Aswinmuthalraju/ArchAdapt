@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth/AuthProvider';
 import { LogOut, FolderKanban, Menu, X } from 'lucide-react';
 import AuthModal from '@/components/auth/AuthModal';
 import { LogoMark, Wordmark } from '@/components/brand/Logo';
-import { onAppAuthStateChange, logoutApp, AppUser } from '@/lib/supabase/client';
+import { logoutApp } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
   { name: 'How it works', href: '/how-it-works' },
@@ -19,22 +20,11 @@ export default function Navbar({ tone = 'light' }: { tone?: 'light' | 'dark' }) 
   const router = useRouter();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<AppUser | null>(null);
+  const { user } = useAuth();
   const dark = tone === 'dark';
-
-  useEffect(() => {
-    const unsubscribe = onAppAuthStateChange((currentUser) => {
-      setUser(currentUser);
-      if (!currentUser && (pathname === '/dashboard' || pathname?.startsWith('/workspace'))) {
-        router.replace('/login');
-      }
-    });
-    return () => unsubscribe();
-  }, [pathname, router]);
 
   const handleSignOut = async () => {
     await logoutApp();
-    setUser(null);
     router.replace('/login');
   };
 
@@ -103,7 +93,7 @@ export default function Navbar({ tone = 'light' }: { tone?: 'light' | 'dark' }) 
         )}
       </header>
 
-      <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onAuthSuccess={(u) => setUser(u)} />
+      <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} onAuthSuccess={() => setIsAuthOpen(false)} />
     </>
   );
 }

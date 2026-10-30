@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { SiteInfo, LocationInfo, DesignRequirements, SpecialMode, ArchitecturalStyle, Project } from '@/types/architectural';
 import { createProjectInSupabase } from '@/lib/services/projectService';
-import { supabase, onAppAuthStateChange, AppUser } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/auth/AuthProvider';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -18,18 +19,13 @@ export default function OnboardingPage() {
   const [loadingStage, setLoadingStage] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [generationError, setGenerationError] = useState<{ title: string; message: string; details: string[]; canUseLocalEngine: boolean; canRetry: boolean } | null>(null);
-  const [user, setUser] = useState<AppUser | null>(null);
+  const { user } = useAuth();
+  // Guests have no account row; only real accounts may write to Supabase.
+  const accountUser = user && !user.isGuest ? user : null;
 
   // File Upload State
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string; previewUrl: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = onAppAuthStateChange((currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -48,10 +44,10 @@ export default function OnboardingPage() {
     });
 
     // Upload to Supabase Storage if user logged in
-    if (user) {
+    if (accountUser) {
       try {
         const fileExt = file.name.split('.').pop();
-        const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+        const filePath = `${accountUser.id}/${Date.now()}.${fileExt}`;
         await supabase.storage.from('site-plans').upload(filePath, file);
       } catch (err) {
         console.warn('Storage upload notice:', err);
@@ -155,8 +151,8 @@ export default function OnboardingPage() {
 
       // Signed-in users save to Supabase under their own account (RLS). Guests keep the project in this browser.
       let savedProject = null;
-      if (user?.id) {
-        savedProject = await createProjectInSupabase(user.id, projectTitle, siteInfo, locationInfo, requirements, preferences, design, rationale);
+      if (accountUser) {
+        savedProject = await createProjectInSupabase(accountUser.id, projectTitle, siteInfo, locationInfo, requirements, preferences, design, rationale);
       }
       const projectId = savedProject?.id || `proj-${Date.now()}`;
 

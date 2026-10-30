@@ -3,6 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder-project.supabase.co';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 
+/** False when the .env values are missing, so screens can say so instead of reporting a vague network error. */
+export const isSupabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface AppUser {
@@ -33,7 +36,7 @@ export function setLocalGuestUser(user: AppUser | null) {
     } else {
       localStorage.removeItem(GUEST_STORAGE_KEY);
     }
-    window.dispatchEvent(new Event('archadapt_auth_change'));
+    window.dispatchEvent(new CustomEvent('archadapt_auth_change', { detail: { user } }));
   } catch {
     /* ignore */
   }
@@ -97,8 +100,12 @@ export function onAppAuthStateChange(callback: (user: AppUser | null) => void): 
     }
   });
 
-  const onLocalChange = () => {
-    update();
+  // A guest sign-in carries its user in the event so every listener switches in the same tick,
+  // before any navigation, instead of briefly seeing nobody signed in.
+  const onLocalChange = (event: Event) => {
+    const guest = (event as CustomEvent<{ user?: AppUser | null }>).detail?.user;
+    if (guest) callback(guest);
+    else update();
   };
 
   if (typeof window !== 'undefined') {

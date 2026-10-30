@@ -20,6 +20,125 @@ const COMPASS_HEAT: Record<string, number> = { N: 0, NE: 0, E: 1, NW: 2, SE: 2, 
 type Edge = 'left' | 'right';
 const opposite = (side: Edge): Edge => (side === 'left' ? 'right' : 'left');
 
+interface StyleProfile {
+  entranceName: string;
+  livingName: string;
+  courtyardName: string;
+  styleStrategy: string;
+  styleFeatures: string[];
+}
+
+function getStyleProfile(normStyle: string, style: string): StyleProfile {
+  switch (normStyle) {
+    case 'kerala_traditional':
+      return {
+        entranceName: 'Poomukham (Sit-out)',
+        livingName: 'Formal Living (Charupadi)',
+        courtyardName: 'Nadumuttam Courtyard',
+        styleStrategy: 'Kerala Traditional: Vernacular monsoon architecture with Poomukham verandah, sloped terracotta rooflines with deep eaves, and central Nadumuttam stack ventilation.',
+        styleFeatures: [
+          'Kerala Traditional',
+          'Nadumuttam central courtyard stack ventilation',
+          'Sloped terracotta hipped roof with deep monsoon eaves',
+          'Teak-timber framed Poomukham / Sit-out verandah'
+        ]
+      };
+    case 'traditional_indian':
+      return {
+        entranceName: 'Verandah with Jali Screen',
+        livingName: 'Baithak / Formal Living',
+        courtyardName: 'Central Chowk (Family Aangan)',
+        styleStrategy: 'Traditional Indian: Central Chowk social core, auspicious Ishan Kon sacred orientation, carved stone accents, and Mangalore tile hip roof.',
+        styleFeatures: [
+          'Traditional Indian',
+          'Central Chowk (Family Aangan) social core',
+          'Auspicious Ishan Kon sacred orientation',
+          'Carved timber & terracotta jali shading',
+          'Heritage Mangalore tile hip roof'
+        ]
+      };
+    case 'colonial':
+      return {
+        entranceName: 'Colonnaded Grand Portico',
+        livingName: 'Formal Reception Drawing Room',
+        courtyardName: 'Colonial Internal Courtyard',
+        styleStrategy: 'Colonial Classical: Colonnaded entrance portico with classical order piers, formal symmetrical zoning, high-ceiling transom ventilation, and hipped mansard roofline.',
+        styleFeatures: [
+          'Colonial Classical',
+          'Colonnaded grand portico entrance',
+          'Formal reception drawing room and symmetrical zoning',
+          'High-ceiling transom ventilation and colonial hip'
+        ]
+      };
+    case 'tropical':
+      return {
+        entranceName: 'Louvered Tropical Breeze Porch',
+        livingName: 'Open-Air Garden Living Pavilion',
+        courtyardName: 'Lush Rain Courtyard & Light Shaft',
+        styleStrategy: 'Tropical Vernacular: Floating pavilion canopy with wide solar shading eaves, cross-ventilation breeze corridors, and seamless garden integration.',
+        styleFeatures: [
+          'Tropical Vernacular',
+          'Floating pavilion canopy with wide solar shading eaves',
+          'Cross-ventilation breeze corridors',
+          'Indoor-outdoor garden courtyard integration'
+        ]
+      };
+    case 'minimalist':
+      return {
+        entranceName: 'Recessed Architectural Foyer',
+        livingName: 'Open Living Gallery',
+        courtyardName: 'Zen Light Court',
+        styleStrategy: 'Minimalist Monolithic: Razor-thin flush monolithic roof slab, concealed linear core, and frameless apertures with restrained materiality.',
+        styleFeatures: [
+          'Minimalist Monolithic',
+          'Razor-thin flush monolithic roof slab without overhangs',
+          'Compact high-efficiency core & concealed storage',
+          'Frameless glazed openings with monochrome palette'
+        ]
+      };
+    case 'modern_luxury':
+      return {
+        entranceName: 'Double-Height Grand Entrance Vestibule',
+        livingName: 'Grand Great Room (Double-Height Void)',
+        courtyardName: 'Landscape Water Court / Terrace Deck',
+        styleStrategy: 'Modern Luxury: Dramatic double-height living void, deep floating cantilevered terrace slabs, and private ensuite sanctuary zoning.',
+        styleFeatures: [
+          'Modern Luxury',
+          'Double-height grand great room void with clerestory light shafts',
+          'Deep floating cantilevered terrace slabs with bronze reveal',
+          'Private ensuite master sanctuary with dressing suite'
+        ]
+      };
+    case 'contemporary':
+      return {
+        entranceName: 'Sculptural Pivot Foyer',
+        livingName: 'Split-Level Social Lounge',
+        courtyardName: 'Sculptural Courtyard Void',
+        styleStrategy: 'Contemporary Dynamic: Asymmetrical stepped volume massing, integrated solar louvers, and flexible indoor-outdoor social terraces.',
+        styleFeatures: [
+          'Contemporary Dynamic',
+          'Asymmetrical stepped volume massing and split-level social zones',
+          'High-performance solar louvers & integrated outdoor terraces',
+          'Sculptural entry pivot and mixed travertine-metal cladding'
+        ]
+      };
+    case 'modern':
+    default:
+      return {
+        entranceName: 'Entrance Porch',
+        livingName: 'Living Room',
+        courtyardName: 'Courtyard',
+        styleStrategy: 'Modern Balanced: Cantilevered upper massing, horizontal parapet roofline, fluid open-plan spine, and floor-to-ceiling glass connections.',
+        styleFeatures: [
+          'Modern Balanced',
+          'Cantilevered upper massing and horizontal parapet roofline',
+          'Fluid open-plan living-dining-kitchen spine',
+          'Expansive floor-to-ceiling sliding glass apertures'
+        ]
+      };
+  }
+}
+
 /**
  * Rule-based room programmer used when Gemini is not available. It applies ordinary residential
  * planning rules to the actual requirements, site orientation and modes — it does not pick a
@@ -66,13 +185,14 @@ export function buildLocalProgram(
     return id;
   };
 
+  const profile = getStyleProfile(normStyle, style);
+
   // ---------- Ground floor: arrival and public rooms ----------
   const largeLiving = /large living|big living|spacious living/.test(text);
-  const living = add('room-living', traditional ? 'Formal Living' : 'Living Room', 'living', 0, 'front', coolSide, area('living', familyScale * (largeLiving ? 1.25 : 1)), {
+  const living = add('room-living', profile.livingName, 'living', 0, 'front', coolSide, area('living', familyScale * (largeLiving ? 1.25 : 1)), {
     features: [climate ? `Placed on the cooler ${compass[coolSide]} side` : 'Faces the road'].concat(largeLiving ? ['Enlarged as requested'] : [])
   });
-  const entranceName = normStyle === 'kerala_traditional' ? 'Verandah (Sit-out)' : traditional ? 'Verandah' : 'Entrance Porch';
-  add('room-entrance', entranceName, 'entrance', 0, 'front', coolSide, area('entrance', traditional || climate ? 1.4 : 0.9), {
+  add('room-entrance', profile.entranceName, 'entrance', 0, 'front', coolSide, area('entrance', traditional || climate ? 1.4 : 0.9), {
     attachedTo: living,
     features: climate ? ['Deep shaded threshold before the living room'] : ['Covered arrival']
   });
@@ -96,8 +216,8 @@ export function buildLocalProgram(
   if (!budgetFirst || bedrooms >= 3) {
     add('room-utility', 'Utility', 'utility', 0, kitchenBand, hotSide, area('utility'), { attachedTo: kitchen, required: false });
   }
-    if (wants('courtyard')) {
-    add('room-courtyard', normStyle === 'kerala_traditional' ? 'Nadumuttam Courtyard' : 'Courtyard', 'courtyard', 0, 'middle', hotSide, area('courtyard', climate ? 1.25 : 1), {
+  if (wants('courtyard')) {
+    add('room-courtyard', profile.courtyardName, 'courtyard', 0, 'middle', hotSide, area('courtyard', climate ? 1.25 : 1), {
       // Beyond the kitchen, so living → dining → kitchen stays unbroken and the kitchen vents into the court.
       relationships: [{ type: 'ADJACENT_TO', target: kitchen }],
       features: climate ? ['Open to sky: draws hot air up and out of the surrounding rooms'] : ['Open to sky']
@@ -229,11 +349,11 @@ export function buildLocalProgram(
       circulationStrategy: floors > 1 ? 'Entrance → living → dining; a dog-legged stair in the middle zone lands on a family lounge that every upper room opens from.' : 'Entrance → living → dining; a rear passage serves the bedrooms.',
       climateStrategy: climate ? `Shaded entrance, ${wants('courtyard') ? 'open-to-sky courtyard for stack ventilation, ' : ''}cross-ventilation and narrowed west-facing windows.` : `Standard daylighting for ${location.city || 'the site'}.`,
       accessibilityStrategy: lifeStage ? 'Ground-floor bedroom and accessible bath, wide passages and doors.' : 'Standard domestic circulation.',
-      styleStrategy: traditional ? `${style}: verandah threshold, pitched tiled roof.` : `${style}: simple volumes and a flat roof.`
+      styleStrategy: profile.styleStrategy
     },
     rationale: `${style} ${bedrooms}BHK on ${floors} floor(s), planned by rule from the stated requirements: public rooms to the ${site.orientation} road, ${climate ? `main rooms on the cooler ${compass[coolSide]} side, ` : ''}${perFloor.map((count, level) => `${count} bedroom(s) on the ${floorName(level).toLowerCase()}`).join(', ')}.`,
     circulationNotes: '',
-    styleFeatures: [style, traditional ? 'Verandah and pitched roof' : 'Flat roof with clean volumes'],
+    styleFeatures: profile.styleFeatures,
     modeConsiderations,
     appearance: DEFAULT_APPEARANCE_BY_STYLE[style] || DEFAULT_APPEARANCE_BY_STYLE['Modern']
   };

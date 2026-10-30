@@ -32,8 +32,18 @@ export interface OpeningMesh3D extends Box3D {
   kind: 'window' | 'door' | 'sliding_glass';
 }
 
+export type RoofType3D =
+  | 'sloped_hipped_gable'
+  | 'traditional_indian_gable'
+  | 'tropical_pitched_canopy'
+  | 'colonial_hipped'
+  | 'minimal_slab'
+  | 'flat_parapet'
+  | 'floating_cantilever_slab'
+  | 'contemporary_split_parapet';
+
 export interface RoofMesh3D {
-  type: 'sloped_hipped_gable' | 'flat_parapet' | 'minimal_slab';
+  type: RoofType3D;
   position: Vec3;
   size: Vec3;
   color: string;
@@ -299,16 +309,34 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
   const roofY = baseY(totalFloors - 1) + STORY_HEIGHT;
   const roofs: RoofMesh3D[] = [];
   let styleName: string;
-  if (normStyle === 'kerala_traditional' || normStyle === 'tropical' || normStyle === 'traditional_indian' || normStyle === 'colonial') {
-    styleName = 'Pitched Tiled Roof';
-    const height = Math.max(1.2, Math.min(roofW, roofD) * 0.28);
-    roofs.push({ type: 'sloped_hipped_gable', position: [roofCentre[0], roofY + height / 2, roofCentre[1]], size: [roofW + 1.4, height, roofD + 1.4], color: design.appearance?.roofColor || '#C86A4B', overhang: 0.7 });
+  if (normStyle === 'kerala_traditional') {
+    styleName = 'Kerala Sloped Terracotta Roof';
+    const height = Math.max(1.35, Math.min(roofW, roofD) * 0.32);
+    roofs.push({ type: 'sloped_hipped_gable', position: [roofCentre[0], roofY + height / 2, roofCentre[1]], size: [roofW + 1.6, height, roofD + 1.6], color: design.appearance?.roofColor || '#BF573F', overhang: 0.8 });
+  } else if (normStyle === 'traditional_indian') {
+    styleName = 'Traditional Indian Chhajja & Hipped Tile';
+    const height = Math.max(1.25, Math.min(roofW, roofD) * 0.29);
+    roofs.push({ type: 'traditional_indian_gable', position: [roofCentre[0], roofY + height / 2, roofCentre[1]], size: [roofW + 1.4, height, roofD + 1.4], color: design.appearance?.roofColor || '#B34A34', overhang: 0.7 });
+  } else if (normStyle === 'tropical') {
+    styleName = 'Tropical Floating Pavilion Canopy';
+    const height = Math.max(1.1, Math.min(roofW, roofD) * 0.24);
+    roofs.push({ type: 'tropical_pitched_canopy', position: [roofCentre[0], roofY + height / 2, roofCentre[1]], size: [roofW + 1.9, height, roofD + 1.9], color: design.appearance?.roofColor || '#4A3728', overhang: 0.95 });
+  } else if (normStyle === 'colonial') {
+    styleName = 'Colonial Mansard & Cornice Hip';
+    const height = Math.max(1.2, Math.min(roofW, roofD) * 0.27);
+    roofs.push({ type: 'colonial_hipped', position: [roofCentre[0], roofY + height / 2, roofCentre[1]], size: [roofW + 1.2, height, roofD + 1.2], color: design.appearance?.roofColor || '#382E2B', overhang: 0.6 });
   } else if (normStyle === 'minimalist') {
-    styleName = 'Minimal Flat Slab';
-    roofs.push({ type: 'minimal_slab', position: [roofCentre[0], roofY + 0.08, roofCentre[1]], size: [roofW + 0.2, 0.16, roofD + 0.2], color: design.appearance?.roofColor || '#282623', overhang: 0.1 });
+    styleName = 'Minimalist Flush Monolithic Slab';
+    roofs.push({ type: 'minimal_slab', position: [roofCentre[0], roofY + 0.08, roofCentre[1]], size: [roofW + 0.1, 0.14, roofD + 0.1], color: design.appearance?.roofColor || '#1E2229', overhang: 0.05 });
+  } else if (normStyle === 'modern_luxury') {
+    styleName = 'Modern Luxury Floating Cantilever';
+    roofs.push({ type: 'floating_cantilever_slab', position: [roofCentre[0], roofY + 0.18, roofCentre[1]], size: [roofW + 0.8, 0.36, roofD + 0.8], color: design.appearance?.roofColor || '#18191B', overhang: 0.4 });
+  } else if (normStyle === 'contemporary') {
+    styleName = 'Contemporary Asymmetric Parapet';
+    roofs.push({ type: 'contemporary_split_parapet', position: [roofCentre[0], roofY + 0.18, roofCentre[1]], size: [roofW + 0.5, 0.32, roofD + 0.5], color: design.appearance?.roofColor || '#374151', overhang: 0.25 });
   } else {
-    styleName = 'Flat Roof with Parapet';
-    roofs.push({ type: 'flat_parapet', position: [roofCentre[0], roofY + 0.15, roofCentre[1]], size: [roofW + 0.4, 0.3, roofD + 0.4], color: design.appearance?.roofColor || '#D0C9BE', overhang: 0.2 });
+    styleName = 'Modern Flat Roof with Parapet';
+    roofs.push({ type: 'flat_parapet', position: [roofCentre[0], roofY + 0.15, roofCentre[1]], size: [roofW + 0.4, 0.28, roofD + 0.4], color: design.appearance?.roofColor || '#2D3139', overhang: 0.2 });
   }
 
   // ---- Site ----

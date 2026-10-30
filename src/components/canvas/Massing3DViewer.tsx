@@ -58,24 +58,93 @@ function Merged({ boxes, children, castShadow = true, receiveShadow = true }: { 
 
 function RoofMesh({ roof, materials }: { roof: HouseGeometry3D['roofs'][0]; materials: HouseMaterialSystem }) {
   const roofMaterial = <meshStandardMaterial color={materials.roof.color} roughness={materials.roof.roughness} metalness={materials.roof.metalness} />;
+  const [width, height, depth] = roof.size;
+
+  // Kerala Traditional: steep terracotta hip with timber eave soffits
   if (roof.type === 'sloped_hipped_gable') {
-    const [width, height, depth] = roof.size;
     return (
       <group position={roof.position}>
-        {/* Hipped roof: a four-sided pyramid stretched to the plan proportions */}
         <group scale={[width / Math.SQRT2, 1, depth / Math.SQRT2]}>
           <mesh rotation={[0, Math.PI / 4, 0]} castShadow receiveShadow>
             <coneGeometry args={[1, height, 4]} />
             {roofMaterial}
           </mesh>
         </group>
-        <mesh position={[0, -height / 2 + 0.06, 0]} castShadow receiveShadow>
-          <boxGeometry args={[width, 0.12, depth]} />
-          {roofMaterial}
+        {/* Timber eave fascia plate */}
+        <mesh position={[0, -height / 2 + 0.05, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, 0.1, depth]} />
+          <meshStandardMaterial color="#8C5A3C" roughness={0.7} />
         </mesh>
       </group>
     );
   }
+
+  // Traditional Indian: terracotta hip with stepped stone cornice base
+  if (roof.type === 'traditional_indian_gable') {
+    return (
+      <group position={roof.position}>
+        <group scale={[width / Math.SQRT2, 1, depth / Math.SQRT2]}>
+          <mesh rotation={[0, Math.PI / 4, 0]} castShadow receiveShadow>
+            <coneGeometry args={[1, height, 4]} />
+            {roofMaterial}
+          </mesh>
+        </group>
+        {/* Stepped stone cornice chhajja */}
+        <mesh position={[0, -height / 2 + 0.04, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, 0.08, depth]} />
+          <meshStandardMaterial color="#CBB996" roughness={0.85} />
+        </mesh>
+        <mesh position={[0, -height / 2 - 0.04, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width - 0.2, 0.08, depth - 0.2]} />
+          <meshStandardMaterial color="#B0A080" roughness={0.88} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // Tropical: low-pitch wide floating pavilion canopy with timber rafter reveal
+  if (roof.type === 'tropical_pitched_canopy') {
+    return (
+      <group position={roof.position}>
+        <group scale={[width / Math.SQRT2, 1, depth / Math.SQRT2]}>
+          <mesh rotation={[0, Math.PI / 4, 0]} castShadow receiveShadow>
+            <coneGeometry args={[1, height, 4]} />
+            {roofMaterial}
+          </mesh>
+        </group>
+        {/* Deep timber under-eave rafter plate */}
+        <mesh position={[0, -height / 2 + 0.04, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width * 0.96, 0.08, depth * 0.96]} />
+          <meshStandardMaterial color="#4A3728" roughness={0.8} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // Colonial: colonial hip with classical white stepped cornice
+  if (roof.type === 'colonial_hipped') {
+    return (
+      <group position={roof.position}>
+        <group scale={[width / Math.SQRT2, 1, depth / Math.SQRT2]}>
+          <mesh rotation={[0, Math.PI / 4, 0]} castShadow receiveShadow>
+            <coneGeometry args={[1, height, 4]} />
+            {roofMaterial}
+          </mesh>
+        </group>
+        {/* Classical white cornice mouldings */}
+        <mesh position={[0, -height / 2 + 0.06, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width, 0.12, depth]} />
+          <meshStandardMaterial color="#FFFFFF" roughness={0.4} />
+        </mesh>
+        <mesh position={[0, -height / 2 - 0.04, 0]} castShadow receiveShadow>
+          <boxGeometry args={[width - 0.15, 0.08, depth - 0.15]} />
+          <meshStandardMaterial color="#FAF8F5" roughness={0.45} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // Minimalist: razor-thin flush monolithic slab
   if (roof.type === 'minimal_slab') {
     return (
       <mesh position={roof.position} castShadow receiveShadow>
@@ -84,6 +153,41 @@ function RoofMesh({ roof, materials }: { roof: HouseGeometry3D['roofs'][0]; mate
       </mesh>
     );
   }
+
+  // Modern Luxury: floating cantilever double-slab with recessed dark bronze reveal
+  if (roof.type === 'floating_cantilever_slab') {
+    return (
+      <group position={roof.position}>
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={roof.size} />
+          {roofMaterial}
+        </mesh>
+        {/* Recessed dark bronze reveal strip */}
+        <mesh position={[0, -roof.size[1] / 2 + 0.04, 0]} castShadow>
+          <boxGeometry args={[roof.size[0] - 0.2, 0.08, roof.size[2] - 0.2]} />
+          <meshStandardMaterial color="#3A3025" roughness={0.3} metalness={0.7} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // Contemporary: asymmetrical stepped split parapet
+  if (roof.type === 'contemporary_split_parapet') {
+    return (
+      <group position={roof.position}>
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={roof.size} />
+          {roofMaterial}
+        </mesh>
+        <mesh position={[roof.size[0] * 0.1, roof.size[1] / 2 + 0.08, 0]} castShadow>
+          <boxGeometry args={[roof.size[0] * 0.7, 0.16, roof.size[2] + 0.06]} />
+          <meshStandardMaterial color="#475569" roughness={0.45} metalness={0.15} />
+        </mesh>
+      </group>
+    );
+  }
+
+  // Default Modern: flat roof with parapet rim
   return (
     <group position={roof.position}>
       <mesh castShadow receiveShadow>

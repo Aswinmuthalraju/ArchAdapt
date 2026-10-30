@@ -2,55 +2,35 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import Navbar from '@/components/navigation/Navbar';
 import { Plus, MapPin, Trash2, ArrowRight } from 'lucide-react';
 import { Project } from '@/types/architectural';
-import { supabase, getCurrentAppUser } from '@/lib/supabase/client';
+import { useAuthGuard } from '@/lib/auth/AuthProvider';
 import { getUserProjectsFromSupabase, deleteProjectFromSupabase } from '@/lib/services/projectService';
 
 export default function DashboardPage() {
-  const router = useRouter();
+  const { status, user } = useAuthGuard();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [signedIn, setSignedIn] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Wait for the session; useAuthGuard sends anonymous visitors to sign-in.
+    if (status === 'loading' || status === 'anonymous') return;
     let cancelled = false;
-
-    // Listen for sign out while on dashboard
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        router.replace('/login');
-      }
-    });
 
     async function loadUserProjects() {
       setLoading(true);
       setLoadError(null);
       const loaded: Project[] = [];
 
-      try {
-        const appUser = await getCurrentAppUser();
-        if (!appUser) {
-          router.replace('/login');
-          return;
+      if (user && !user.isGuest) {
+        try {
+          const dbProjects = await getUserProjectsFromSupabase(user.id);
+          loaded.push(...dbProjects.map((project) => ({ ...project, storage: 'supabase' as const })));
+        } catch {
+          if (!cancelled) setLoadError('Your account projects could not be loaded.');
         }
-
-        if (!cancelled) setSignedIn(true);
-
-        if (!appUser.isGuest) {
-          try {
-            const dbProjects = await getUserProjectsFromSupabase(appUser.id);
-            loaded.push(...dbProjects.map((project) => ({ ...project, storage: 'supabase' as const })));
-          } catch {
-            if (!cancelled) setLoadError('Your account projects could not be loaded.');
-          }
-        }
-      } catch {
-        router.replace('/login');
-        return;
       }
 
       // Also include any offline projects saved in this browser
@@ -72,9 +52,8 @@ export default function DashboardPage() {
     loadUserProjects();
     return () => {
       cancelled = true;
-      subscription.unsubscribe();
     };
-  }, [router]);
+  }, [status, user]);
 
   const handleDelete = async (project: Project) => {
     if (!window.confirm(`Delete "${project.title}" and all of its versions? This cannot be undone.`)) return;
@@ -124,7 +103,7 @@ export default function DashboardPage() {
           <div className="border border-stone-300 bg-white p-12 text-center space-y-4">
             <h2 className="font-serif text-2xl text-stone-900">No projects yet</h2>
             <p className="font-sans text-sm text-stone-600 max-w-lg mx-auto">
-              {signedIn
+              {status === 'authenticated'
                 ? 'Create a project to generate a floor plan and 3D model from your plot and requirements.'
                 : 'Create a project to generate a floor plan and 3D model. Sign in first if you want it saved to your account; otherwise it is kept in this browser.'}
             </p>

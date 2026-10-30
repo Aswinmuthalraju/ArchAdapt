@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { RotatingBadge } from '@/components/brand/Logo';
 import { lenisRef } from '@/lib/motion';
-import { onAppAuthStateChange } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/auth/AuthProvider';
 
 const PRIMARY = [
   { name: 'Try it', href: '/onboarding' },
@@ -23,12 +23,7 @@ const MENU = [
 export default function SiteHeader() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [signedIn, setSignedIn] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = onAppAuthStateChange((user) => setSignedIn(Boolean(user)));
-    return () => unsubscribe();
-  }, []);
+  const signedIn = Boolean(useAuth().user);
 
   useEffect(() => {
     if (!open) return;

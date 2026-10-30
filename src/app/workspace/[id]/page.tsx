@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import FloorPlan2DRenderer from '@/components/canvas/FloorPlan2DRenderer';
 import Massing3DViewer from '@/components/canvas/Massing3DViewer';
@@ -11,7 +11,8 @@ import ExportMenu from '@/components/workspace/ExportMenu';
 import { analyseDesign, DEFAULT_LIMITS, PlanLimits } from '@/lib/pro/analysis';
 import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare } from 'lucide-react';
 import { Project, FloorPlanVersion, StructuredDesignJSON, WhatIfMessage } from '@/types/architectural';
-import { supabase, authHeaders, getCurrentAppUser, onAppAuthStateChange } from '@/lib/supabase/client';
+import { supabase, authHeaders } from '@/lib/supabase/client';
+import { useAuthGuard } from '@/lib/auth/AuthProvider';
 import { getUserProjectsFromSupabase, setCurrentVersionInSupabase } from '@/lib/services/projectService';
 import { validateFloorPlan } from '@/lib/design/validateFloorPlan';
 import { checkRenderConsistency } from '@/lib/geometry/buildHouseGeometry';
@@ -29,7 +30,7 @@ const WELCOME: WhatIfMessage = {
 type LoadState = 'loading' | 'ready' | 'not_found';
 
 export default function WorkspacePage() {
-  const router = useRouter();
+  const { status, user: authUser } = useAuthGuard();
   const params = useParams();
   const projectId = params?.id as string;
 
@@ -59,34 +60,23 @@ export default function WorkspacePage() {
   };
 
   useEffect(() => {
-    if (!projectId) return;
+    // Wait for the session; useAuthGuard sends anonymous visitors to sign-in.
+    if (!projectId || status === 'loading' || status === 'anonymous') return;
     let cancelled = false;
-
-    // Listen for sign out
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        router.replace('/login');
-      }
-    });
 
     async function load() {
       let found: Project | null = null;
       let signedIn = false;
 
-      try {
-        const appUser = await getCurrentAppUser();
-        if (appUser && !appUser.isGuest) {
-          signedIn = true;
-          try {
-            const projects = await getUserProjectsFromSupabase(appUser.id);
-            const match = projects.find((p) => p.id === projectId);
-            if (match) found = { ...match, storage: 'supabase' };
-          } catch (err) {
-            console.warn('[Workspace] Supabase load failed, checking this browser:', err);
-          }
+      if (authUser && !authUser.isGuest) {
+        signedIn = true;
+        try {
+          const projects = await getUserProjectsFromSupabase(authUser.id);
+          const match = projects.find((p) => p.id === projectId);
+          if (match) found = { ...match, storage: 'supabase' };
+        } catch (err) {
+          console.warn('[Workspace] Supabase load failed, checking this browser:', err);
         }
-      } catch {
-        /* check local storage */
       }
 
       if (!found) {
@@ -130,9 +120,8 @@ export default function WorkspacePage() {
     load();
     return () => {
       cancelled = true;
-      subscription.unsubscribe();
     };
-  }, [projectId, router]);
+  }, [projectId, status, authUser]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });

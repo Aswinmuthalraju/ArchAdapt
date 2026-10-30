@@ -215,7 +215,8 @@ export function modelObj(design: StructuredDesignJSON, title: string): ExportFil
   obj.group('Stairs'); geometry.stairSteps.forEach((s) => obj.box(s));
   obj.group('Railings'); geometry.railings.forEach((r) => obj.box(r));
   obj.group('Roof');
-  geometry.roofs.forEach((roof) => (roof.type === 'sloped_hipped_gable' ? obj.pyramid(roof.position, roof.size) : obj.box({ position: roof.position, size: roof.size, floorLevel: geometry.totalFloors - 1 })));
+  const isPitchedRoof = (type: string) => ['sloped_hipped_gable', 'traditional_indian_gable', 'tropical_pitched_canopy', 'colonial_hipped'].includes(type);
+  geometry.roofs.forEach((roof) => (isPitchedRoof(roof.type) ? obj.pyramid(roof.position, roof.size) : obj.box({ position: roof.position, size: roof.size, floorLevel: geometry.totalFloors - 1 })));
   return { filename: `${slug(title)}-model.obj`, mime: 'model/obj', content: header + obj.toString() };
 }
 

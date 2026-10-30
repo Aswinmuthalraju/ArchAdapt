@@ -47,52 +47,52 @@ export const FRAME_COLOR_PRESETS = [
 
 export const DEFAULT_APPEARANCE_BY_STYLE: Record<string, HouseAppearance> = {
   'Kerala Traditional': {
-    wallColor: '#F4F1EA',
-    roofColor: '#C86A4B',
-    frameColor: '#3B2A1E',
+    wallColor: '#F5EBE1',
+    roofColor: '#BF573F',
+    frameColor: '#3E2723',
     accentMaterial: 'wood'
   },
   'Modern': {
-    wallColor: '#FAFAFA',
-    roofColor: '#282623',
-    frameColor: '#121417',
+    wallColor: '#F8F9FA',
+    roofColor: '#2D3139',
+    frameColor: '#1A1D20',
     accentMaterial: 'wood'
   },
   'Minimalist': {
-    wallColor: '#FAFAFA',
-    roofColor: '#282623',
-    frameColor: '#121417',
+    wallColor: '#ECEEF0',
+    roofColor: '#1E2229',
+    frameColor: '#111315',
     accentMaterial: 'concrete'
   },
   'Contemporary': {
-    wallColor: '#E6DFD3',
-    roofColor: '#3A424B',
-    frameColor: '#121417',
+    wallColor: '#E3DDD3',
+    roofColor: '#374151',
+    frameColor: '#1F2937',
     accentMaterial: 'stone'
   },
   'Colonial': {
-    wallColor: '#F4F1EA',
-    roofColor: '#4A3525',
+    wallColor: '#FBF8F1',
+    roofColor: '#382E2B',
     frameColor: '#FFFFFF',
     accentMaterial: 'wood'
   },
   'Tropical': {
-    wallColor: '#F4F1EA',
-    roofColor: '#C86A4B',
-    frameColor: '#3B2A1E',
+    wallColor: '#E8DFCE',
+    roofColor: '#4A3728',
+    frameColor: '#2C221E',
     accentMaterial: 'wood'
   },
   'Traditional Indian': {
-    wallColor: '#F4F1EA',
-    roofColor: '#C86A4B',
-    frameColor: '#3B2A1E',
+    wallColor: '#EADCC3',
+    roofColor: '#B34A34',
+    frameColor: '#422518',
     accentMaterial: 'stone'
   },
   'Modern Luxury': {
-    wallColor: '#FAFAFA',
-    roofColor: '#282623',
-    frameColor: '#121417',
-    accentMaterial: 'wood'
+    wallColor: '#EBE7DE',
+    roofColor: '#18191B',
+    frameColor: '#252321',
+    accentMaterial: 'stone'
   }
 };
 
@@ -114,13 +114,16 @@ export function getHouseMaterials(
   if (accentType === 'stone') accentColor = '#605B54';
   else if (accentType === 'concrete') accentColor = '#8A8680';
 
+  const isLuxury = styleName === 'Modern Luxury';
+  const isMinimalist = styleName === 'Minimalist';
+
   return {
-    wall: { color: wallColor, roughness: 0.55, metalness: 0.02 },
-    roof: { color: roofColor, roughness: 0.65, metalness: 0.08 },
-    frame: { color: frameColor, roughness: 0.3, metalness: 0.4 },
-    glass: { color: '#2B5B84', roughness: 0.1, metalness: 0.8, transmission: 0.85, opacity: 0.8, transparent: true },
-    plinth: { color: '#D5D0C7', roughness: 0.8, metalness: 0.05 },
-    woodAccent: { color: '#8C5A3C', roughness: 0.7, metalness: 0.05 },
+    wall: { color: wallColor, roughness: isMinimalist ? 0.35 : 0.58, metalness: 0.02 },
+    roof: { color: roofColor, roughness: 0.62, metalness: isLuxury ? 0.18 : 0.06 },
+    frame: { color: frameColor, roughness: isLuxury ? 0.22 : 0.32, metalness: isLuxury ? 0.65 : 0.4 },
+    glass: { color: '#2B5B84', roughness: 0.08, metalness: 0.85, transmission: 0.88, opacity: 0.82, transparent: true },
+    plinth: { color: '#D5D0C7', roughness: 0.82, metalness: 0.04 },
+    woodAccent: { color: '#8C5A3C', roughness: 0.72, metalness: 0.04 },
     stoneAccent: { color: accentColor, roughness: 0.85, metalness: 0.05 },
     lawn: { color: '#4A6B5D', roughness: 0.95, metalness: 0.0 },
     driveway: { color: '#A8A297', roughness: 0.85, metalness: 0.05 }
