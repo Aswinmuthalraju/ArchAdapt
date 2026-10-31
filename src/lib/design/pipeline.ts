@@ -14,9 +14,12 @@ import { getRelevantKnowledge } from '@/lib/genai/rag/architecturalKnowledge';
 import { layoutProgram } from './layoutEngine';
 import { buildConstraints, parseProgram, programFromDesign, validateProgramRequirements } from './program';
 import { validateFloorPlan } from './validateFloorPlan';
+import { StyleLevel, applyStyleMandates, checkStyleConformance, describeStyleAdditions, styleBlueprint } from './styleBlueprints';
 
 export const MAX_GENERATION_ATTEMPTS = 2;
 const TIME_BUDGET_MS = 165_000;
+/** Above this share of shrinkage the style is relaxed before the rooms are squeezed further. */
+const COMFORTABLE_COMPRESSION = 0.2;
 
 export type EngineId = 'gemini' | 'local-rule-engine';
 
@@ -59,6 +62,8 @@ interface StageResult {
   errors: string[];
   warnings: string[];
   notes: string[];
+  /** Share by which room sizes were shrunk to fit (0 = target sizes kept). */
+  compression?: number;
   infeasible?: { reason: string; violatedConstraints: string[] };
 }
 
@@ -76,7 +81,7 @@ export function realiseProgram(program: DesignProgram, site: SiteInfo, constrain
   if (!layout.ok) return { errors: [layout.reason], warnings: [], notes: [], infeasible: { reason: layout.reason, violatedConstraints: layout.violatedConstraints } };
 
   const report = validateFloorPlan(layout.design);
-  return { design: report.isValid ? layout.design : undefined, errors: report.errors, warnings: report.warnings, notes: layout.notes };
+  return { design: report.isValid ? layout.design : undefined, errors: report.errors, warnings: report.warnings, notes: layout.notes, compression: layout.compression };
 }
 
 /**
@@ -97,7 +102,7 @@ function stamp(design: StructuredDesignJSON, intent: 'INITIAL_DESIGN' | 'GENERAT
  */
 export async function generateDesign(input: GenerationInput): Promise<GenerationOutcome> {
   const { site, location, requirements, preferences } = input;
-  const constraints = buildConstraints(requirements, preferences);
+  const baseConstraints = buildConstraints(requirements, preferences);
   const intent = input.alternativeTo ? 'GENERATE_ALTERNATIVE_CONCEPT' : 'INITIAL_DESIGN';
   const previousConcept = input.alternativeTo?.conceptNumber || 1;
   const conceptNumber = input.alternativeTo ? previousConcept + 1 : 1;
@@ -109,14 +114,44 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
   // A planning variant that does not validate is skipped for the next one, so the user is not left with an error
   // when another arrangement of the same brief works.
   // Variants 0-2 are different strategies; 3-5 repeat them left-to-right mirrored, which resolves briefs whose wet rooms land on the wrong side.
-  const localVariant = (n: number) => {
-    const program = buildLocalProgram(site, location, constraints, custom, n % 3);
-    return n < 3 ? program : mirrorSides(program);
+  const solveBaseline = (candidate: DesignConstraints) => {
+    const variantFor = (n: number) => {
+      const program = buildLocalProgram(site, location, candidate, custom, n % 3);
+      return n < 3 ? program : mirrorSides(program);
+    };
+    let result = realiseProgram(variantFor(firstVariant), site, candidate);
+    for (let step = 1; step < 6 && !result.design && !result.infeasible; step++) {
+      const next = realiseProgram(variantFor((firstVariant + step) % 6), site, candidate);
+      if (next.design || next.infeasible) result = next;
+    }
+    return result;
   };
-  let baseline = realiseProgram(localVariant(firstVariant), site, constraints);
-  for (let step = 1; step < 6 && !baseline.design && !baseline.infeasible; step++) {
-    const next = realiseProgram(localVariant((firstVariant + step) % 6), site, constraints);
-    if (next.design || next.infeasible) baseline = next;
+  // Every style asks for its own rooms and proportions. When the plot cannot hold all of them the style is
+  // relaxed in steps (full → without the courtyard → signature room only → client's brief alone) and the user is
+  // told what was dropped. A level that only fits by shrinking rooms well below their targets gives way to the
+  // next one, so a small plot gets fewer, properly sized rooms instead of every room squeezed.
+  const blueprint = styleBlueprint(baseConstraints.style);
+  const courtyardMandated = blueprint.spaces.includes('courtyard') && !baseConstraints.requiredSpaces.includes('courtyard');
+  const levels: StyleLevel[] = ['full', ...(courtyardMandated ? ['reduced' as StyleLevel] : []), 'core', 'none'];
+  let constraints = applyStyleMandates(baseConstraints, levels[0]);
+  let baseline = solveBaseline(constraints);
+  let firstValid = baseline.design ? { constraints, baseline } : undefined;
+  for (const level of levels.slice(1)) {
+    if (baseline.design && (baseline.compression ?? 0) <= COMFORTABLE_COMPRESSION) break;
+    const nextConstraints = applyStyleMandates(baseConstraints, level);
+    const next = solveBaseline(nextConstraints);
+    if (next.design && !firstValid) firstValid = { constraints: nextConstraints, baseline: next };
+    constraints = nextConstraints;
+    baseline = next;
+  }
+  if (!(baseline.design && (baseline.compression ?? 0) <= COMFORTABLE_COMPRESSION) && firstValid) ({ constraints, baseline } = firstValid);
+  const styleNotes = describeStyleAdditions(baseConstraints, constraints);
+  if (constraints.styleLevel === 'reduced') {
+    styleNotes.push(`This plot is too small for a true ${blueprint.courtyardTerm || 'courtyard'} (an open-to-sky court of at least 9 ft x 9 ft with rooms on all four sides), so it was left out; the other ${blueprint.label} elements were kept.`);
+  } else if (constraints.styleLevel !== 'full' && blueprint.spaces.length + (blueprint.ensuiteAll ? 1 : 0) > 0) {
+    styleNotes.push(constraints.styleLevel === 'core'
+      ? `Not every ${blueprint.label} room fits this plot, so only its defining space was kept.`
+      : `This plot could not hold the rooms that define ${blueprint.label} style, so the plan follows your brief alone.`);
   }
   if (baseline.infeasible) {
     return { status: 'INFEASIBLE', reason: baseline.infeasible.reason, violatedConstraints: baseline.infeasible.violatedConstraints, attempts: 0, canUseLocalEngine: false };
@@ -127,7 +162,7 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
       return { status: 'INVALID_DESIGN', reason: 'The built-in rule engine could not produce a valid plan for this brief.', violatedConstraints: baseline.errors, attempts: 1, canUseLocalEngine: false };
     }
     stamp(baseline.design, intent, 'local-rule-engine', 'local-rule-engine', 1, conceptNumber);
-    return { status: 'OK', design: baseline.design, engine: 'local-rule-engine', modelId: 'local-rule-engine', attempts: 1, warnings: baseline.warnings, notes: baseline.notes, notice };
+    return { status: 'OK', design: baseline.design, engine: 'local-rule-engine', modelId: 'local-rule-engine', attempts: 1, warnings: [...styleNotes, ...baseline.warnings], notes: baseline.notes, notice };
   };
 
   if (input.engine === 'local') return runLocal();
@@ -140,7 +175,7 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
   const promptInput: ProgramPromptInput = {
     site, location, constraints, customRequirements: custom,
     secondaryStyle: typeof preferences.secondaryStyle === 'string' ? preferences.secondaryStyle : undefined,
-    ragContext: getRelevantKnowledge(custom, preferences.modes || [])
+    ragContext: getRelevantKnowledge(custom, preferences.modes || [], constraints.style)
   };
   const currentProgram = input.alternativeTo ? programFromDesign(input.alternativeTo) : null;
   const deadline = Date.now() + TIME_BUDGET_MS;
@@ -179,11 +214,17 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
       feedback = parsed.errors;
       continue;
     }
+    const styleErrors = checkStyleConformance(parsed.program, constraints);
+    if (styleErrors.length) {
+      lastErrors = styleErrors;
+      feedback = styleErrors;
+      continue;
+    }
     const stage = realiseProgram(parsed.program, site, constraints);
     if (stage.design) {
       stamp(stage.design, intent, 'gemini', call.modelId, attempts, conceptNumber);
       stage.design.layoutNotes = [...parsed.notes, ...stage.notes];
-      return { status: 'OK', design: stage.design, engine: 'gemini', modelId: call.modelId, attempts, warnings: stage.warnings, notes: stage.design.layoutNotes };
+      return { status: 'OK', design: stage.design, engine: 'gemini', modelId: call.modelId, attempts, warnings: [...styleNotes, ...stage.warnings], notes: stage.design.layoutNotes };
     }
     lastErrors = stage.errors;
     feedback = stage.errors;

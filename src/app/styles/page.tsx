@@ -12,98 +12,98 @@ export default function ArchitecturalStylesPage() {
     {
       name: 'Kerala Traditional',
       tagline: 'Vernacular Tropical Heritage & Monsoon Climate Architecture',
-      img: 'https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/kerala-traditional.jpg',
       characteristics: [
         'Nadumuttam central open-to-sky courtyard',
         'Sloped terracotta gable rooflines with deep monsoon overhangs',
         'Wood-louvered Sit-out verandahs',
         'Exposed laterite stone masonry and earthen textures'
       ],
-      spatialImpact: 'Organizes rooms around a central stack-ventilation courtyard with sheltered exterior verandahs.'
+      spatialImpact: 'Adds a Nadumuttam courtyard, a puja room and a store to every brief, and opens the plan with a deep Poomukham sit-out.'
     },
     {
       name: 'Modern',
       tagline: 'Clean Geometries, Open Floor Plans & Seamless Indoor-Outdoor Transition',
-      img: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/modern.jpg',
       characteristics: [
         'Cantilevered upper floor massing & clean horizontal parapets',
         'Floor-to-ceiling sliding glass facade panels',
         'Open-plan living, dining, and kitchen spatial spine',
         'Minimalist metal accents and architectural pivot doors'
       ],
-      spatialImpact: 'Emphasizes linear circulation, double-height living spaces, and expansive glazed wall connections.'
+      spatialImpact: 'Plans a linear spine with the living room as the largest space, flowing into dining and kitchen.'
     },
     {
       name: 'Minimalist',
       tagline: 'Restrained Spatial Composition, Compact Cores & Quiet Materials',
-      img: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/minimalist.jpg',
       characteristics: [
         'Compact central plumbing & utility core',
         'Flush wall transitions & concealed storage alcoves',
         'Polished cement render & monochrome stone surfaces',
         'Restrained perimeter footprint minimizing circulation loss'
       ],
-      spatialImpact: 'Optimizes square footage efficiency with streamlined room layouts and minimal corridor waste.'
+      spatialImpact: 'Trims every room to a compact size, adds concealed storage, and leaves out the utility room, courtyard and any extras you did not ask for.'
     },
     {
       name: 'Contemporary',
       tagline: 'Adaptive Fluid Geometry, Sculptural Facades & High Performance',
-      img: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/contemporary.jpg',
       characteristics: [
         'Asymmetrical rooflines & dynamic volume intersections',
         'Integrated solar shading louvers & green wall recesses',
         'Flexible multi-purpose transition spaces',
         'High-performance insulated glazing'
       ],
-      spatialImpact: 'Combines open social spaces with private split-level zoning.'
+      spatialImpact: 'Adds a study and a generous balcony, enlarges the family lounge, and staggers the upper floor against the ground floor.'
     },
     {
       name: 'Colonial',
       tagline: 'Symmetrical Formality, High Ceilings & Covered Colonnades',
-      img: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/colonial.jpg',
       characteristics: [
         'Formal central entrance porch & archways',
         'High 12ft ceilings with transom window ventilation',
         'Symmetrical window placement & perimeter colonnades',
         'Dedicated foyer & reception spaces'
       ],
-      spatialImpact: 'Enforces clear formal separation between public guest spaces and private family wings.'
+      spatialImpact: 'Gives the house a grand colonnaded portico, a formal dining room, a library-style study and an upper veranda, each in its own room.'
     },
     {
       name: 'Tropical',
       tagline: 'Lush Landscape Integration, Deep Overhangs & Natural Light Shafts',
-      img: 'https://images.unsplash.com/photo-1600573472550-8090b5e0745e?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/tropical.jpg',
       characteristics: [
         'Semi-open garden courtyards & outdoor showers',
         'Wide roof eaves shading glass openings from zenith solar heat',
         'Natural timber slats & woven bamboo textures',
         'Cross-ventilation wind corridors'
       ],
-      spatialImpact: 'Creates deep transitional balconies and semi-covered verandahs surrounding living areas.'
+      spatialImpact: 'Adds an open courtyard, a wide balcony or veranda and open garden area, with passages along the open edges for cross-ventilation.'
     },
     {
       name: 'Traditional Indian',
       tagline: 'Courtyard-Centered Courtyards, Jali Screens & Sacred Orientations',
-      img: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/traditional-indian.jpg',
       characteristics: [
         'Sacred North-East Puja room positioning',
         'Carved wooden accents & terracotta jali shading screens',
         'Central family courtyard (Chowk) for social gathering',
         'Shaded roof terraces & sit-outs'
       ],
-      spatialImpact: 'Prioritizes central courtyard gathering cores and cardinal spatial zoning.'
+      spatialImpact: 'Rings the rooms around a central Chowk courtyard, adds a puja room, and keeps a separate Baithak guest room by the entrance.'
     },
     {
       name: 'Modern Luxury',
       tagline: 'Double-Height Voids, Premium Materiality & Private Suites',
-      img: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=800&q=80',
+      img: '/images/styles/modern-luxury.jpg',
       characteristics: [
         'Double-height grand living hall with ceiling light shafts',
         'Spacious ensuite master bedrooms with walk-in wardrobes',
         'Covered multi-car parking garage & security foyer',
         'Private infinity balcony terraces'
       ],
-      spatialImpact: 'Generous room dimensions, private ensuite zones, and dramatic double-height living volumes.'
+      spatialImpact: 'Gives every bedroom its own bathroom, adds a dressing suite to the master, a study, a guest room and two-car parking, with every room sized generously.'
     }
   ];
 

@@ -14,6 +14,7 @@ import { DEFAULT_APPEARANCE_BY_STYLE } from '@/lib/geometry/materials';
 import { planCompass } from '@/lib/geometry/planGeometry';
 import { ROOM_TYPE_SPECS, floorName } from '@/lib/design/roomTypes';
 import { normalizeProgram } from '@/lib/design/program';
+import { styleAreaFactor, styleBlueprint } from '@/lib/design/styleBlueprints';
 
 const TIER_SCALE: Record<DesignConstraints['budgetRange'], number> = { Economy: 0.85, Moderate: 1, Premium: 1.15, Luxury: 1.3 };
 const COMPASS_HEAT: Record<string, number> = { N: 0, NE: 0, E: 1, NW: 2, SE: 2, S: 3, W: 5, SW: 5 };
@@ -162,12 +163,12 @@ export function buildLocalProgram(
   const budgetFirst = modes.includes('budget_first');
   const renovation = modes.includes('renovation');
   const normStyle = normalizeStyleName(style, [], '');
-  const traditional = ['kerala_traditional', 'tropical', 'traditional_indian', 'colonial'].includes(normStyle);
   const text = customRequirements.toLowerCase();
 
   const scale = TIER_SCALE[constraints.budgetRange] * (budgetFirst ? 0.88 : 1);
   const familyScale = constraints.familySize >= 6 ? 1.15 : constraints.familySize <= 2 ? 0.92 : 1;
-  const area = (type: RoomType, factor = 1) => Math.round(Math.max(ROOM_TYPE_SPECS[type].minArea, ROOM_TYPE_SPECS[type].targetArea * scale * factor));
+  const blueprint = styleBlueprint(style);
+  const area = (type: RoomType, factor = 1) => Math.round(Math.max(ROOM_TYPE_SPECS[type].minArea, ROOM_TYPE_SPECS[type].targetArea * scale * factor * styleAreaFactor(constraints, type)));
 
   // Which side of the plan is cooler depends on which way the plot faces.
   const compass = planCompass(site.orientation);
@@ -192,7 +193,7 @@ export function buildLocalProgram(
   const living = add('room-living', profile.livingName, 'living', 0, 'front', coolSide, area('living', familyScale * (largeLiving ? 1.25 : 1)), {
     features: [climate ? `Placed on the cooler ${compass[coolSide]} side` : 'Faces the road'].concat(largeLiving ? ['Enlarged as requested'] : [])
   });
-  add('room-entrance', profile.entranceName, 'entrance', 0, 'front', coolSide, area('entrance', traditional || climate ? 1.4 : 0.9), {
+  add('room-entrance', profile.entranceName, 'entrance', 0, 'front', coolSide, area('entrance', climate ? 1.2 : 1), {
     attachedTo: living,
     features: climate ? ['Deep shaded threshold before the living room'] : ['Covered arrival']
   });
@@ -204,8 +205,10 @@ export function buildLocalProgram(
 
   const hasDining = wants('dining') || !requiredSpaces.length;
   const diningBand: PlanBand = variant === 1 ? 'front' : 'middle';
+  // In a single-storey courtyard house a bedroom flanks the court on the cool side, so dining sits in the centre beside it.
+  const courtFlank = wants('courtyard') && floors === 1;
   const dining = hasDining
-    ? add('room-dining', 'Dining', 'dining', 0, diningBand, variant === 1 ? 'center' : coolSide, area('dining', familyScale), { relationships: [{ type: 'CONNECTED_TO', target: living }] })
+    ? add('room-dining', 'Dining', 'dining', 0, diningBand, variant === 1 || courtFlank ? 'center' : coolSide, area('dining', familyScale), { relationships: [{ type: 'CONNECTED_TO', target: living }] })
     : undefined;
 
   const kitchenBand: PlanBand = variant === 2 ? 'rear' : 'middle';
@@ -213,13 +216,13 @@ export function buildLocalProgram(
     relationships: dining ? [{ type: 'CONNECTED_TO', target: dining }] : [{ type: 'CONNECTED_TO', target: living }],
     features: budgetFirst ? ['Shares a plumbing wall with the utility'] : []
   });
-  if (!budgetFirst || bedrooms >= 3) {
+  if ((!budgetFirst || bedrooms >= 3) && !blueprint.omit?.includes('utility')) {
     add('room-utility', 'Utility', 'utility', 0, kitchenBand, hotSide, area('utility'), { attachedTo: kitchen, required: false });
   }
   if (wants('courtyard')) {
-    add('room-courtyard', profile.courtyardName, 'courtyard', 0, 'middle', hotSide, area('courtyard', climate ? 1.25 : 1), {
-      // Beyond the kitchen, so living → dining → kitchen stays unbroken and the kitchen vents into the court.
-      relationships: [{ type: 'ADJACENT_TO', target: kitchen }],
+    add('room-courtyard', profile.courtyardName, 'courtyard', 0, 'middle', 'center', area('courtyard', climate ? 1.25 : 1), {
+      // At the heart of the plan: living in front, dining and kitchen either side, bedrooms behind, so it is enclosed on all four sides.
+      relationships: [{ type: 'ADJACENT_TO', target: dining || living }],
       features: climate ? ['Open to sky: draws hot air up and out of the surrounding rooms'] : ['Open to sky']
     });
   }
@@ -254,6 +257,16 @@ export function buildLocalProgram(
     }
   }
 
+  // Nalukettu: with no stair to close the courtyard's far side, a ground-floor bedroom does, entered from the court's edge.
+  if (courtFlank) {
+    const flank = [...rooms].reverse().find((room) => room.floor === 0 && room.type === 'bedroom' && room.band === 'rear');
+    if (flank) {
+      flank.band = 'middle';
+      flank.side = coolSide;
+      flank.features = [...flank.features, 'Opens onto the courtyard'];
+    }
+  }
+
   // Free-standing small rooms sit in the sleeping zone so they never interrupt living → dining → kitchen.
   const smallRoomBand = (floor: number): PlanBand => (rooms.some((room) => room.floor === floor && room.band === 'rear' && ROOM_TYPE_SPECS[room.type].placement === 'major') ? 'rear' : 'middle');
 
@@ -266,7 +279,8 @@ export function buildLocalProgram(
     if (bathsLeft <= 0) return;
     const accessible = lifeStage && floor === 0;
     const id = `room-bath-${bathNumber}`;
-    const commonBand = smallRoomBand(floor);
+    const anchorRoom = anchor ? rooms.find((room) => room.id === anchor.id) : undefined;
+    const commonBand = anchorRoom?.band === 'middle' ? 'middle' : smallRoomBand(floor);
     add(id, anchor ? (anchor.id === 'room-master' ? 'Master Bath' : `Attached Bath ${bathNumber}`) : `Common Bath${floor > 0 ? ` (${floorName(floor)})` : ''}`, 'bathroom', floor, commonBand, budgetFirst ? hotSide : 'center', area('bathroom', accessible ? 1.3 : 1), {
       attachedTo: anchor?.id,
       features: accessible ? ['Accessible: wider door, level-entry shower'] : budgetFirst ? ['Stacked on the shared plumbing core'] : [],
@@ -282,6 +296,8 @@ export function buildLocalProgram(
   if (master && bathrooms > floorsNeedingBath) addBath(master.floor, master);
   for (let floor = 0; floor < floors; floor++) {
     if (floorHasBath.has(floor) || (perFloor[floor] === 0 && floor !== 0)) continue;
+    // Ensuite-for-all styles give every bedroom its own bathroom instead of a shared one.
+    if (blueprint.ensuiteAll && bathsLeft <= bedroomIds.length - withEnsuite.size && perFloor[floor] > 0) continue;
     // Life-Stage: the ground-floor bathroom opens straight off the ground-floor bedroom.
     const groundBed = lifeStage && floor === 0 ? bedroomIds.find((bed) => bed.floor === 0) : undefined;
     addBath(floor, groundBed, true);
@@ -290,6 +306,10 @@ export function buildLocalProgram(
     if (!withEnsuite.has(bed.id)) addBath(bed.floor, bed);
   }
   while (bathsLeft > 0) addBath(0, undefined, true);
+
+  if (blueprint.masterDressing && master) {
+    add('room-dressing', 'Dressing Suite', 'dressing', master.floor, 'rear', 'center', area('dressing'), { attachedTo: master.id, features: ['Walk-in wardrobe between the master bedroom and its bath'] });
+  }
 
   // ---------- Other requested rooms ----------
   if (wants('storage')) add('room-store', 'Store', 'store', 0, smallRoomBand(0), 'center', area('store'), { relationships: [{ type: 'NEAR', target: kitchen }] });
@@ -326,7 +346,9 @@ export function buildLocalProgram(
   }
 
   // ---------- Narrative that states what the geometry actually does ----------
-  const planningType: DesignProgram['planningType'] = wants('courtyard') ? 'courtyard_centered' : budgetFirst ? 'compact_core' : variant === 1 ? 'zoned_wings' : variant === 2 ? 'l_shaped' : 'linear_circulation';
+  const styled = constraints.styleLevel !== 'none';
+  const stylePlanning = blueprint.planningType === 'courtyard_centered' ? 'compact_core' : blueprint.planningType;
+  const planningType: DesignProgram['planningType'] = wants('courtyard') ? 'courtyard_centered' : styled && variant === 0 ? stylePlanning : budgetFirst ? 'compact_core' : variant === 1 ? 'zoned_wings' : variant === 2 ? 'l_shaped' : 'linear_circulation';
   // The stair takes the end of the circulation zone away from the kitchen, next to the dining room.
   const stairSide: Edge = coolSide;
   const modeConsiderations: DesignProgram['modeConsiderations'] = [];
@@ -339,7 +361,7 @@ export function buildLocalProgram(
     rooms,
     stairSide,
     planningType,
-    circulationType: wants('courtyard') ? 'central' : 'spine',
+    circulationType: wants('courtyard') ? 'central' : styled ? blueprint.circulationType : 'spine',
     architecturalBrief: {
       planningIntent: `${bedrooms}-bedroom, ${bathrooms}-bathroom ${style} house on ${floors} floor(s) for a family of ${constraints.familySize}.`,
       siteResponse: `${site.plotWidth} ft x ${site.plotDepth} ft plot facing ${site.orientation}; the road is the plan front.`,

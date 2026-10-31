@@ -18,23 +18,23 @@ const STEPS = [
   { title: 'Your plan', text: 'A checked floor plan and a matching 3D model, both from one design. Ask for changes in plain words and compare versions side by side.' },
 ];
 
-const unsplash = (id: string) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=900&q=75`;
+const img = (name: string) => `/images/styles/${name}.jpg`;
 const STYLES = [
-  { name: 'Kerala Traditional', note: 'Courtyards, deep eaves, monsoon roofs', img: unsplash('1600585154526-990dced4db0d') },
-  { name: 'Modern', note: 'Clean lines and open plans', img: unsplash('1600596542815-ffad4c1539a9') },
-  { name: 'Minimalist', note: 'Compact cores, quiet materials', img: unsplash('1600607687939-ce8a6c25118c') },
-  { name: 'Contemporary', note: 'Sculpted volumes, shaded glass', img: unsplash('1600585154340-be6161a56a0c') },
-  { name: 'Colonial', note: 'Symmetry, high ceilings, colonnades', img: unsplash('1600566753190-17f0baa2a6c3') },
-  { name: 'Tropical', note: 'Overhangs, light shafts, gardens', img: unsplash('1600573472550-8090b5e0745e') },
-  { name: 'Traditional Indian', note: 'Courtyards and jali screens', img: '/images/residential-interior.jpg' },
-  { name: 'Modern Luxury', note: 'Double-height voids, private suites', img: unsplash('1600607687920-4e2a09cf159d') },
+  { name: 'Kerala Traditional', note: 'Courtyards, deep eaves, monsoon roofs', img: img('kerala-traditional') },
+  { name: 'Modern', note: 'Clean lines and open plans', img: img('modern') },
+  { name: 'Minimalist', note: 'Compact cores, quiet materials', img: img('minimalist') },
+  { name: 'Contemporary', note: 'Sculpted volumes, shaded glass', img: img('contemporary') },
+  { name: 'Colonial', note: 'Symmetry, high ceilings, colonnades', img: img('colonial') },
+  { name: 'Tropical', note: 'Overhangs, light shafts, gardens', img: img('tropical') },
+  { name: 'Traditional Indian', note: 'Courtyards and jali screens', img: img('traditional-indian') },
+  { name: 'Modern Luxury', note: 'Double-height voids, private suites', img: img('modern-luxury') },
 ];
 
 const MODES = [
-  { name: 'Climate-adaptive', text: 'Courtyards, cross-breezes and deep eaves placed for the weather where you build.', img: unsplash('1600573472550-8090b5e0745e') },
-  { name: 'Life-stage', text: 'A ground-floor suite, step-free thresholds and rooms that change as the family does.', img: '/images/living-space.jpg' },
-  { name: 'Budget-first', text: 'A compact footprint and shared plumbing walls, so more of the budget goes into the home.', img: unsplash('1600607687939-ce8a6c25118c') },
-  { name: 'Renovation', text: 'Keeps the walls worth keeping and works new rooms into the house you already have.', img: '/images/residential-interior.jpg' },
+  { name: 'Climate-adaptive', text: 'Courtyards, cross-breezes and deep eaves placed for the weather where you build.', img: img('climate-adaptive') },
+  { name: 'Life-stage', text: 'A ground-floor suite, step-free thresholds and rooms that change as the family does.', img: img('life-stage') },
+  { name: 'Budget-first', text: 'A compact footprint and shared plumbing walls, so more of the budget goes into the home.', img: img('budget-first') },
+  { name: 'Renovation', text: 'Keeps the walls worth keeping and works new rooms into the house you already have.', img: img('renovation') },
 ];
 
 const NUMBERS = [

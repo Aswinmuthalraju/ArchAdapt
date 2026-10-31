@@ -148,15 +148,15 @@ html[data-header='ink'] .rail-count b { color: var(--gold-deep); }
 .hero { height: 100svh; min-height: 640px; overflow: hidden; color: var(--ivory); background: #1d2421; --focus: var(--gold-light); }
 .hero-media, .hero-media-inner { position: absolute; inset: 0; }
 .hero-media img { object-fit: cover; }
-.hero-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20, 22, 26, .62) 0%, rgba(20, 22, 26, .18) 42%, rgba(20, 22, 26, .12) 60%, rgba(59, 10, 38, .7) 100%); }
+.hero-shade { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 44% at 50% 40%, rgba(14, 16, 20, .58), rgba(14, 16, 20, .28) 55%, rgba(14, 16, 20, 0) 100%), linear-gradient(180deg, rgba(20, 22, 26, .62) 0%, rgba(20, 22, 26, .18) 42%, rgba(20, 22, 26, .12) 60%, rgba(59, 10, 38, .7) 100%); }
 .petals { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; pointer-events: none; }
-.hero-kicker { position: absolute; top: 46px; left: 0; right: 0; z-index: 3; text-align: center; color: rgba(244, 241, 234, .88); }
+.hero-kicker { position: absolute; top: 46px; left: 0; right: 0; z-index: 3; text-align: center; color: rgba(244, 241, 234, .95); text-shadow: 0 1px 14px rgba(10, 12, 16, .6); }
 .hero-title-wrap { position: absolute; left: 0; right: 0; top: max(15vh, 120px); z-index: 3; text-align: center; }
-.hero-title { position: relative; display: inline-block; text-shadow: 0 2px 40px rgba(10, 12, 16, .25); }
+.hero-title { position: relative; display: inline-block; text-shadow: 0 1px 2px rgba(10, 12, 16, .35), 0 6px 28px rgba(10, 12, 16, .45), 0 0 80px rgba(10, 12, 16, .3); }
 .hero-title .display { font-size: clamp(4.5rem, 14vw, 14.5rem); line-height: 1; }
 .hero-line { clip-path: inset(-25% -8% 0 -8%); }
 .hero-char { display: inline-block; transform-origin: 50% 100%; }
-.hero-script { position: absolute; right: -.1em; bottom: -.5em; font-family: var(--font-script); font-size: clamp(3rem, 8.5vw, 9rem); line-height: 1.2; padding: 0 .25em .1em .15em; text-transform: none; letter-spacing: 0; color: var(--ivory); white-space: nowrap; }
+.hero-script { position: absolute; right: -.1em; bottom: -.5em; font-family: var(--font-script); font-size: clamp(3rem, 8.5vw, 9rem); line-height: 1.2; padding: 0 .25em .1em .15em; text-transform: none; letter-spacing: 0; color: var(--ivory); white-space: nowrap; text-shadow: 0 2px 22px rgba(10, 12, 16, .55); }
 .hero-script-line { position: absolute; left: .55em; right: .25em; bottom: .22em; height: 1px; background: var(--gold-metal); transform-origin: left; }
 .hero-tags { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .hero-tag { position: absolute; top: 69%; font-family: var(--font-serif); font-size: clamp(1rem, 2vw, 1.9rem); text-transform: uppercase; letter-spacing: .04em; }
@@ -299,6 +299,18 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 .style-card-body > .label:first-child { color: var(--gold-deep); margin-bottom: 14px; }
 .style-card-body .label--muted { margin: 24px 0 12px; }
 
+/* ---------- Short landscape screens (phones on their side, wide banners) ---------- */
+@media (max-height: 600px) and (orientation: landscape) {
+  .hero { min-height: 0; }
+  .hero .hero-kicker { top: 18px; font-size: 10px; }
+  .hero .hero-title-wrap { top: 11vh; }
+  .hero .hero-title .display { font-size: min(14vw, 27vh); }
+  .hero .hero-script { font-size: min(8.5vw, 17vh); }
+  .hero .hero-tags, .hero .hero-lede { display: none; }
+  .hero .hero-bottom { bottom: 14px; grid-template-columns: 1fr auto; }
+  .hero .circle-btn { width: 84px; height: 84px; }
+}
+
 /* ---------- Mobile ---------- */
 @media (max-width: 899px) {
   .site-header { padding: 14px var(--gutter); align-items: center; }
@@ -307,6 +319,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
   .site-menu-btn { display: block; }
   .hero-kicker { top: 104px; padding: 0 var(--gutter); }
   .hero-title-wrap { top: 22vh; }
+  .hero-shade { background: radial-gradient(ellipse 120% 34% at 50% 36%, rgba(14, 16, 20, .68), rgba(14, 16, 20, .32) 60%, rgba(14, 16, 20, 0) 100%), linear-gradient(180deg, rgba(20, 22, 26, .62) 0%, rgba(20, 22, 26, .18) 42%, rgba(20, 22, 26, .12) 60%, rgba(59, 10, 38, .7) 100%); }
   .hero-title .display { font-size: clamp(3.2rem, 16.5vw, 9rem); }
   .hero-script { font-size: clamp(2.6rem, 13vw, 5rem); right: -.15em; }
   .hero-tag { top: auto; bottom: 280px; font-size: 1rem; }

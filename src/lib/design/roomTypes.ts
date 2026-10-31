@@ -30,7 +30,7 @@ export const ROOM_TYPE_SPECS: Record<RoomType, RoomTypeSpec> = {
   puja: { category: 'puja', zoning: 'semi_private', privacy: 'medium', minArea: 12, targetArea: 25, minSide: 3, color: '#F3E8D2', placement: 'side_stack', habitable: false },
   parking: { category: 'circulation', zoning: 'circulation', privacy: 'low', minArea: 135, targetArea: 160, minSide: 9, color: '#DCE2E5', placement: 'major', habitable: false },
   balcony: { category: 'outdoor', zoning: 'outdoor', privacy: 'low', minArea: 24, targetArea: 50, minSide: 3.5, color: '#DCE5E1', placement: 'inline_front', hubPriority: 6, habitable: false },
-  courtyard: { category: 'outdoor', zoning: 'outdoor', privacy: 'medium', minArea: 36, targetArea: 80, minSide: 6, color: '#CFE0D2', placement: 'major', hubPriority: 3, habitable: false },
+  courtyard: { category: 'outdoor', zoning: 'outdoor', privacy: 'medium', minArea: 81, targetArea: 110, minSide: 9, color: '#CFE0D2', placement: 'major', hubPriority: 3, habitable: false },
   lounge: { category: 'living', zoning: 'semi_private', privacy: 'medium', minArea: 50, targetArea: 90, minSide: 6, color: '#F1ECE1', placement: 'major', hubPriority: 1, habitable: true },
   stair: { category: 'circulation', zoning: 'circulation', privacy: 'low', minArea: 60, targetArea: 80, minSide: 6.5, color: '#D6D1C7', placement: 'major', hubPriority: 2, habitable: false },
   passage: { category: 'circulation', zoning: 'circulation', privacy: 'low', minArea: 20, targetArea: 60, minSide: 3, color: '#E3DED3', placement: 'major', hubPriority: 2, habitable: false },

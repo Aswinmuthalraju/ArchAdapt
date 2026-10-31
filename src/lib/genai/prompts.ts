@@ -2,6 +2,7 @@ import { DesignConstraints, DesignProgram, LocationInfo, SiteInfo } from '@/type
 import { buildableEnvelope } from '@/lib/design/layoutEngine';
 import { planCompass } from '@/lib/geometry/planGeometry';
 import { ROOM_TYPE_SPECS } from '@/lib/design/roomTypes';
+import { styleDirectiveBlock } from '@/lib/design/styleBlueprints';
 
 const AUTHORABLE_TYPES = ['entrance', 'living', 'dining', 'kitchen', 'utility', 'master_bedroom', 'bedroom', 'guest_room', 'bathroom', 'study', 'store', 'puja', 'parking', 'balcony', 'courtyard', 'lounge', 'dressing', 'terrace'] as const;
 
@@ -76,6 +77,8 @@ SOFT PREFERENCES (optimise where the hard requirements allow)
 - Family of ${constraints.familySize}; budget tier ${constraints.budgetRange}; style ${constraints.style}${secondaryStyle ? ` with ${secondaryStyle} influence` : ''}.
 ${customRequirements ? `- The client's own words: "${customRequirements.replace(/"/g, "'")}"` : '- No additional notes from the client.'}
 
+${styleDirectiveBlock(constraints)}
+
 ACTIVE MODES: ${modes.join(', ') || 'none'}
 ${modeRules.join('\n') || '- No special mode rules.'}`;
 }
@@ -120,8 +123,8 @@ PROGRAMME RULES
 - Each zone of a floor holds at most about (envelope width / 9) rooms side by side; spread bedrooms across the front and rear zones of upper floors instead of lining them all up in one zone.
 - The entrance is attachedTo the living room. A utility is attachedTo the kitchen. An ensuite bathroom is attachedTo its bedroom; a shared bathroom has no attachedTo and belongs in the rear zone near the bedrooms.
 - On every upper floor include one "lounge" (landing/family room) in the middle zone; the upper rooms open from it.
-- Keep living → dining → kitchen in an unbroken sequence (use CONNECTED_TO), and keep bedrooms PRIVATE_FROM the living room. In practice: living in the front zone; dining in the middle zone on the SAME side as the living room; kitchen at the far end of the middle zone from the stair. A courtyard goes beyond the kitchen or beside the dining room, never between living, dining and kitchen.
-- Only include rooms the brief asks for, plus an entrance, one utility, and one lounge per upper floor. Do not add guest rooms, studies, prayer rooms, stores or extra bathrooms that were not requested.
+- Keep living → dining → kitchen in an unbroken sequence (use CONNECTED_TO), and keep bedrooms PRIVATE_FROM the living room. In practice: living in the front zone; dining in the middle zone on the SAME side as the living room; kitchen at the far end of the middle zone from the stair. A courtyard goes in the middle zone of floor 0 and the engine places it at the centre of that zone: it needs a walled room on each side of it (the stair counts), the living room in front and rooms behind, so it is enclosed on all four sides. It must never sit between dining and kitchen, and must be at least 81 sq ft with no side under 9 ft. If the envelope cannot enclose one, leave it out unless the client asked for it.
+- Only include rooms the brief asks for, plus an entrance, one utility, and one lounge per upper floor. Do not add guest rooms, studies, prayer rooms, stores or extra bathrooms that were neither requested nor required by the STYLE MANDATE.
 - Use relationships to state the reasoning the geometry must honour; do not list relationships you do not need.`;
 
 export function buildProgramPrompt(input: ProgramPromptInput, feedback?: string[]): string {
@@ -129,7 +132,7 @@ export function buildProgramPrompt(input: ProgramPromptInput, feedback?: string[
     'DESIGN A ROOM PROGRAMME FOR THIS HOUSE.',
     siteBlock(input),
     requirementsBlock(input),
-    `REFERENCE GUIDELINES\n${input.ragContext}`,
+    `STYLE AND DESIGN KNOWLEDGE (retrieved for this ${input.constraints.style} brief; the style items define how this house must differ from other styles)\n${input.ragContext}`,
     SCHEMA_BLOCK,
     feedback?.length
       ? `YOUR PREVIOUS PROGRAMME FAILED VALIDATION BECAUSE:\n${feedback.map((line) => `- ${line}`).join('\n')}\nReturn a corrected programme that fixes every point above while still meeting all hard requirements.`

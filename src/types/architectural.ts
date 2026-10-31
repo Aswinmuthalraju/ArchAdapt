@@ -148,6 +148,8 @@ export interface DesignConstraints {
   budgetRange: DesignRequirements['budgetRange'];
   modes: SpecialMode[];
   style: string;
+  /** How strongly the style's signature rooms and sizing were applied (see styleBlueprints). */
+  styleLevel?: 'full' | 'reduced' | 'core' | 'none';
 }
 
 export interface DesignProgram {

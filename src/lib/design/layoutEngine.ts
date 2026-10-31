@@ -16,7 +16,7 @@ import {
   StructuredDesignJSON
 } from '@/types/architectural';
 import { DEFAULT_APPEARANCE_BY_STYLE } from '@/lib/geometry/materials';
-import { PlanCell, Rect, deriveWallSegments, round2, sharedEdge, wallsToCanonical } from '@/lib/geometry/planGeometry';
+import { OPEN_TYPES, PlanCell, Rect, deriveWallSegments, round2, sharedEdge, wallsToCanonical } from '@/lib/geometry/planGeometry';
 import { ROOM_TYPE_SPECS, floorName, isBedroomType } from './roomTypes';
 import { solveOpenings } from './openings';
 
@@ -25,6 +25,8 @@ export interface LayoutSuccess {
   design: StructuredDesignJSON;
   notes: string[];
   unreachable: string[]; // ids of rooms the door solver could not connect
+  /** Share (0-1) by which target room areas were shrunk to fit the envelope. */
+  compression: number;
 }
 
 export interface LayoutFailure {
@@ -142,6 +144,27 @@ function buildUnits(rooms: WorkRoom[]): Unit[] {
     const middle = majors.filter((room) => room !== toLeft && room !== toRight && room !== stair);
     majors.splice(0, majors.length, ...(stair?.side === 'left' ? [stair] : []), ...(toLeft ? [toLeft] : []), ...middle, ...(toRight ? [toRight] : []), ...(stair?.side === 'right' ? [stair] : []));
   }
+  // A courtyard is the heart of its zone: it goes between the other rooms so they close it on both sides,
+  // never at an end where it would meet the outside wall. The stair keeps its end.
+  // It is kept from splitting dining and kitchen, which must open into each other under a roof.
+  const court = majors.find((room) => room.type === 'courtyard');
+  if (court) {
+    const stair = majors.find((room) => room.type === 'stair');
+    const others = majors.filter((room) => room !== court && room !== stair);
+    const sequence = [...(stair && stair.side === 'left' ? [stair] : []), ...others, ...(stair && stair.side !== 'left' ? [stair] : [])];
+    const splitsMeal = (i: number) => {
+      const pair = [sequence[i - 1]?.type, sequence[i]?.type];
+      return pair.includes('dining') && pair.includes('kitchen');
+    };
+    let at = Math.ceil(sequence.length / 2);
+    let bestCost = Infinity;
+    for (let i = 1; i < sequence.length; i++) {
+      const cost = (splitsMeal(i) ? 10 : 0) + Math.abs(i - sequence.length / 2);
+      if (cost < bestCost) { bestCost = cost; at = i; }
+    }
+    sequence.splice(Math.max(1, Math.min(at, sequence.length)), 0, court);
+    majors.splice(0, majors.length, ...sequence);
+  }
   const majorIds = new Set(majors.map((room) => room.id));
   const rest = rooms.filter((room) => !majorIds.has(room.id));
   const inline = rest.filter((room) => spec(room).placement === 'inline_front' && room.attachedTo && majorIds.has(room.attachedTo));
@@ -171,7 +194,9 @@ function buildUnits(rooms: WorkRoom[]): Unit[] {
     // side, otherwise at the end away from the kitchen; between bedrooms in a sleeping zone.
     const stair = majors.find((room) => room.type === 'stair');
     const hasHub = majors.some((room) => ['living', 'dining', 'lounge', 'kitchen'].includes(room.type));
+    // Never between a room and its own bath/dressing stack.
     let at = Math.min(1, units.length);
+    while (at < units.length && units[at].kind === 'stack' && units[at].anchor && units[at].anchor === units[0].rooms[0]) at++;
     if (stair) at = stair.side === 'left' ? 0 : units.length;
     else if (hasHub) at = majors[majors.length - 1].type === 'kitchen' ? 0 : units.length;
     units.splice(at, 0, ...unanchored);
@@ -286,6 +311,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   /** The zone that carries the stair and runs the full width of the house. */
   const circulationBand: PlanBand = twoZone ? 'front' : 'middle';
   const notes: string[] = [];
+  let compression = 0;
   const plotWidth = Number(site.plotWidth);
   const plotDepth = Number(site.plotDepth);
   if (!(plotWidth > 0) || !(plotDepth > 0)) {
@@ -313,6 +339,10 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   // A lean attempt leaves out rooms the planner marked as not required (and whatever was attached to them).
   const kept = lean ? program.rooms.filter((room) => room.required !== false) : program.rooms;
   const targets: WorkRoom[] = kept.filter((room) => !room.attachedTo || kept.some((other) => other.id === room.attachedTo)).map((room, order) => ({ ...room, area: room.areaSqFt, order }));
+  if (twoZone && kept.some((room) => room.type === 'courtyard' && room.floor === 0)) {
+    // With only two zones a courtyard can only sit beside the front rooms, open to the outside: that is not a courtyard.
+    return { ok: false, reason: 'The buildable depth is too shallow for a courtyard enclosed by rooms.', violatedConstraints: ['Courtyard needs rooms on all four sides'] };
+  }
   if (twoZone) {
     const publicTypes: RoomType[] = ['living', 'dining', 'lounge', 'kitchen', 'courtyard', 'entrance', 'parking'];
     targets.forEach((room) => { if (room.band === 'middle') room.band = publicTypes.includes(room.type) ? 'front' : 'rear'; });
@@ -446,6 +476,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     }
     applyCompression(lo);
     const reduction = Math.round((1 - sum(targets.map((room) => room.area)) / sum(targets.map((room) => Math.max(spec(room).minArea, room.areaSqFt)))) * 100);
+    compression = reduction / 100;
     notes.push(`Target room sizes were reduced by about ${reduction}% overall so the programme fits the ${fmtFt(envWidth)} x ${fmtFt(envDepth)} buildable envelope. No room is below its minimum usable size.`);
   }
 
@@ -474,7 +505,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   for (const band of BANDS) {
     let extent = Math.max(...Array.from({ length: floors }, (_, floor) => naturalWidth(floor, band)));
     const hasReserved = Array.from({ length: floors }, (_, floor) => reservedWidth(floor, band)).some((w) => w > 0);
-    if (band === circulationBand || hasReserved || footprintWidth - extent < 4) extent = footprintWidth;
+    if (band === circulationBand || hasReserved || footprintWidth - extent < 4 || courtyards.length) extent = footprintWidth;
     extent = Math.min(extent, footprintWidth);
     const reference = Array.from({ length: floors }, (_, floor) => roomsIn(floor, band).filter(isMajor)).find((list) => list.length) || [];
     const alignRight = reference.filter((room) => room.side === 'right').length > reference.filter((room) => room.side === 'left').length;
@@ -693,6 +724,37 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     };
   }
 
+  // A courtyard must be enclosed: rooms close every side of it. One that meets the outside wall is a leftover gap,
+  // not a courtyard, so the arrangement is rejected and the caller tries another (or leaves the courtyard out).
+  for (const court of placed.filter((p) => p.room.type === 'courtyard' && p.room.floor === 0)) {
+    // Only walled rooms close a courtyard; a car porch, sit-out or porch beside it leaves it open to the street.
+    const others = placed.filter((p) => p !== court && p.room.floor === 0 && !OPEN_TYPES.includes(p.room.type));
+    const { x, y, w, d } = court.rect;
+    const closed = (orientation: 'horizontal' | 'vertical', at: number, length: number) =>
+      sum(others.map((p) => {
+        const edge = sharedEdge(court.rect, p.rect);
+        return edge && edge.orientation === orientation && Math.abs(edge.at - at) < 0.1 ? edge.length : 0;
+      })) / length;
+    const open = [closed('horizontal', y, w), closed('horizontal', y + d, w), closed('vertical', x, d), closed('vertical', x + w, d)].some((share) => share < 0.85);
+    if (open) {
+      return {
+        ok: false,
+        reason: `"${court.room.name}" cannot be enclosed by rooms on this ${fmtFt(envWidth)} x ${fmtFt(envDepth)} buildable envelope; it would sit against an outside wall.`,
+        violatedConstraints: ['Courtyard needs rooms on all four sides']
+      };
+    }
+  }
+
+  // Dining and kitchen must open into each other under a roof, not across an open court.
+  for (const floor of Array.from({ length: floors }, (_, level) => level)) {
+    const dining = placed.find((p) => p.room.floor === floor && p.room.type === 'dining');
+    const kitchen = placed.find((p) => p.room.floor === floor && p.room.type === 'kitchen');
+    const courtBetween = dining && kitchen && placed.some((p) => p.room.floor === floor && p.room.type === 'courtyard' && !!sharedEdge(p.rect, dining.rect) && !!sharedEdge(p.rect, kitchen.rect));
+    if (courtBetween && (sharedEdge(dining!.rect, kitchen!.rect)?.length ?? 0) < 3) {
+      return { ok: false, reason: 'The courtyard would separate the dining room from the kitchen.', violatedConstraints: ['Dining and kitchen must share a wall'] };
+    }
+  }
+
   // ---- Canonical design object ----
   const cells: PlanCell[] = placed.map((p) => ({
     id: p.room.id,
@@ -838,5 +900,5 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   };
 
   const required = new Set(placed.filter((p) => !(p.room.derived && ["terrace", "balcony"].includes(p.room.type))).map((p) => p.room.id));
-  return { ok: true, design, notes, unreachable: opened.unreachable.filter((id) => required.has(id)) };
+  return { ok: true, design, notes, unreachable: opened.unreachable.filter((id) => required.has(id)), compression };
 }

@@ -241,11 +241,13 @@ export function buildHouseGeometry(design: StructuredDesignJSON): HouseGeometry3
   const stairCells = cells.filter((cell) => cell.type === 'stair').sort((a, b) => a.floor - b.floor);
   for (const cell of stairCells) {
     const stair = planStair(cell.rect, stairFoot);
-    // The well beside the foot landing is guarded on every floor above the ground.
-    if (cell.floor > 0) {
+    // On the top floor the well over the first flight is guarded at the edge of the foot landing. The other half is
+    // where the second flight arrives, so it stays open; floors in between leave both halves open (one flight
+    // arrives, the next one leaves).
+    if (cell.floor > 0 && cell.floor >= totalFloors - 1) {
       stairRails.push({
-        position: [X(cell.rect.x + cell.rect.w / 2), baseY(cell.floor) + 0.5, Z(stairY(cell.rect, stairFoot, stair.footDepth))],
-        size: [cell.rect.w * FT, 1, 0.05],
+        position: [X(cell.rect.x + cell.rect.w / 4), baseY(cell.floor) + 0.5, Z(stairY(cell.rect, stairFoot, stair.footDepth))],
+        size: [(cell.rect.w / 2) * FT, 1, 0.05],
         floorLevel: cell.floor
       });
     }
