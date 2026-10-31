@@ -62,7 +62,7 @@ export default function HowItWorksPage() {
 
   return (
     <MotionPage>
-      <section className="page-hero" data-section="Workflow" data-header="ink">
+      <section className="page-hero" data-section="Workflow" data-rail-label="Workflow" data-rail-count="01" data-rail-total="07" data-header="ink">
         <Blossom branch="c" side="right" className="blossom--page" speed={-20} />
         <p className="label label--rule">The ArchAdapt AI Workflow</p>
         <h1 className="display display--sm" data-stretch><SplitText text={'How ArchAdapt AI\nEngine Works'} /></h1>
@@ -71,10 +71,10 @@ export default function HowItWorksPage() {
         </p>
       </section>
 
-      <section className="page-list" data-section="Stages" data-bg="ivory" data-header="ink">
+      <section className="page-list" data-bg="ivory" data-header="ink">
         <ol className="row-list">
           {steps.map((s) => (
-            <li key={s.num} className="row" data-fade>
+            <li key={s.num} className="row" data-fade data-section={`Stage ${s.num}`} data-rail-label={`Stage ${s.num}`} data-rail-count={s.num} data-rail-total="07">
               <span className="numeral gold-shimmer">{s.num}</span>
               <div className="row-main">
                 <h2 className="row-title">{s.title}</h2>
@@ -89,7 +89,7 @@ export default function HowItWorksPage() {
         </ol>
       </section>
 
-      <section className="page-callout" data-section="Begin" data-bg="sky" data-header="ink">
+      <section className="page-callout" data-section="Begin" data-rail-label="Begin" data-rail-count="07" data-rail-total="07" data-bg="sky" data-header="ink">
         <div>
           <p className="label">Start Your Project</p>
           <h2 className="callout-title" data-stretch><SplitText text="Ready to generate your first adaptive house concept?" /></h2>

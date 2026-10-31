@@ -18,7 +18,9 @@ export default function SmoothScroll() {
       gsap.ticker.remove(tick);
       gsap.ticker.lagSmoothing(500, 33);
       lenis.destroy();
-      lenisRef.current = null;
+      if (lenisRef.current === lenis) {
+        lenisRef.current = null;
+      }
     };
   }, []);
   return null;

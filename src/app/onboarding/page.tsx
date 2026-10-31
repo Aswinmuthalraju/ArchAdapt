@@ -64,6 +64,24 @@ export default function OnboardingPage() {
     totalArea: 2400,
     orientation: 'E'
   });
+  const [dimensionError, setDimensionError] = useState<string | null>(null);
+
+  const handleNextToLocation = () => {
+    if (!siteInfo.plotWidth || siteInfo.plotWidth <= 0 || !siteInfo.plotDepth || siteInfo.plotDepth <= 0) {
+      setDimensionError('Plot width and depth must be greater than 0 (minimum 10 ft).');
+      return;
+    }
+    if (siteInfo.plotWidth < 10 || siteInfo.plotDepth < 10) {
+      setDimensionError('Plot width and depth must be at least 10 ft.');
+      return;
+    }
+    if (siteInfo.plotWidth > 1000 || siteInfo.plotDepth > 1000) {
+      setDimensionError('Plot width and depth must be at most 1000 ft.');
+      return;
+    }
+    setDimensionError(null);
+    setStep(2);
+  };
 
   // Step 2: Location
   const [locationInfo, setLocationInfo] = useState<LocationInfo>({
@@ -314,9 +332,15 @@ export default function OnboardingPage() {
                 <label className="block text-[11px] text-stone-600 mb-1">Plot Width (ft)</label>
                 <input
                   type="number"
+                  min="10"
+                  max="1000"
                   value={siteInfo.plotWidth}
-                  onChange={(e) => setSiteInfo({ ...siteInfo, plotWidth: Number(e.target.value), totalArea: Number(e.target.value) * siteInfo.plotDepth })}
-                  className="w-full border border-stone-300 px-4 py-3 font-sans text-sm font-semibold text-stone-900 focus:border-stone-900 focus:outline-none"
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setSiteInfo({ ...siteInfo, plotWidth: val, totalArea: val * siteInfo.plotDepth });
+                    if (val >= 10 && siteInfo.plotDepth >= 10) setDimensionError(null);
+                  }}
+                  className={`w-full border px-4 py-3 font-sans text-sm font-semibold text-stone-900 focus:outline-none ${dimensionError && (!siteInfo.plotWidth || siteInfo.plotWidth < 10) ? 'border-red-500 bg-red-50/30 focus:border-red-600' : 'border-stone-300 focus:border-stone-900'}`}
                 />
               </div>
 
@@ -324,9 +348,15 @@ export default function OnboardingPage() {
                 <label className="block text-[11px] text-stone-600 mb-1">Plot Depth (ft)</label>
                 <input
                   type="number"
+                  min="10"
+                  max="1000"
                   value={siteInfo.plotDepth}
-                  onChange={(e) => setSiteInfo({ ...siteInfo, plotDepth: Number(e.target.value), totalArea: siteInfo.plotWidth * Number(e.target.value) })}
-                  className="w-full border border-stone-300 px-4 py-3 font-sans text-sm font-semibold text-stone-900 focus:border-stone-900 focus:outline-none"
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setSiteInfo({ ...siteInfo, plotDepth: val, totalArea: siteInfo.plotWidth * val });
+                    if (siteInfo.plotWidth >= 10 && val >= 10) setDimensionError(null);
+                  }}
+                  className={`w-full border px-4 py-3 font-sans text-sm font-semibold text-stone-900 focus:outline-none ${dimensionError && (!siteInfo.plotDepth || siteInfo.plotDepth < 10) ? 'border-red-500 bg-red-50/30 focus:border-red-600' : 'border-stone-300 focus:border-stone-900'}`}
                 />
               </div>
 
@@ -349,9 +379,15 @@ export default function OnboardingPage() {
               </div>
             </div>
 
+            {dimensionError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded" role="alert">
+                {dimensionError}
+              </div>
+            )}
+
             <div className="flex justify-end pt-4">
               <button
-                onClick={() => setStep(2)}
+                onClick={handleNextToLocation}
                 className="flex items-center gap-2 btn-gem px-8 py-3.5 text-sm font-semibold text-white transition-all"
               >
                 Next: Location

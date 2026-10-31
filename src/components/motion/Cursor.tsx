@@ -28,12 +28,22 @@ export default function Cursor() {
       yTo(event.clientY);
       el.dataset.visible = 'true';
       if (magnet) {
+        if (!magnet.isConnected) {
+          release();
+          return;
+        }
         const box = magnet.getBoundingClientRect();
         gsap.to(magnet, { x: (event.clientX - box.left - box.width / 2) * 0.28, y: (event.clientY - box.top - box.height / 2) * 0.28, duration: 0.4, ease: 'power3' });
       }
     };
     const over = (event: PointerEvent) => {
-      const target = event.target as Element;
+      const rawTarget = event.target;
+      if (!rawTarget) return;
+      const target = rawTarget instanceof Element
+        ? rawTarget
+        : (rawTarget as Node).parentElement;
+      if (!target || typeof target.closest !== 'function') return;
+
       const labelled = target.closest<HTMLElement>('[data-cursor]');
       const interactive = target.closest('a, button, [role="button"], input, select, textarea');
       const text = labelled?.dataset.cursor || '';

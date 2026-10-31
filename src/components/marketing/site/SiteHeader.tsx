@@ -39,9 +39,20 @@ export default function SiteHeader() {
   }, [open]);
 
   const account = signedIn ? { name: 'My projects', href: '/dashboard' } : { name: 'Sign in', href: '/login' };
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const isScrolled = window.scrollY > 40;
+      setScrolled((prev) => (prev !== isScrolled ? isScrolled : prev));
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
-    <header className="site-header">
+    <header className="site-header" data-scrolled={scrolled}>
       <Link href="/" className="site-badge" aria-label="ArchAdapt AI home" data-magnetic>
         <RotatingBadge />
       </Link>
