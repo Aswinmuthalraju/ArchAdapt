@@ -169,6 +169,14 @@ export async function runSweep() {
   console.log(`Rooms Reached via Private Room: ${totalRoomsThroughPrivate}  (Target: 0)`);
   console.log('=================================================\n');
 
+  // Say exactly which combinations the engine declines, with its reason, so they are documented rather than implied.
+  const declined = results.filter((r: any) => r.status && r.status !== 'OK') as any[];
+  if (declined.length) {
+    console.log('Declined combinations (documented infeasible):');
+    declined.forEach((r) => console.log(`  - ${r.style} | ${r.plot} | ${r.brief}: ${String(r.reason).slice(0, 110)}`));
+    console.log('');
+  }
+
   // Strict Threshold Validations
   const thresholdFailures: string[] = [];
 
