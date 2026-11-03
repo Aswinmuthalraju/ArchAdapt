@@ -409,7 +409,7 @@ export default function WorkspacePage() {
               role="tab"
               aria-selected={activeTab === id}
               onClick={() => setActiveTab(id)}
-              className={`${id === 'ask' ? 'xl:hidden ' : ''}flex items-center gap-2 px-3 py-1.5 text-sm transition-colors sm:px-4 ${activeTab === id ? 'bg-gold-400 font-semibold text-plum-950' : 'text-stone-300 hover:text-gold-200'}`}
+              className={`${id === 'ask' ? 'xl:hidden ' : ''}flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 text-[13px] transition-colors sm:gap-2 sm:px-4 sm:text-sm ${activeTab === id ? 'bg-gold-400 font-semibold text-plum-950' : 'text-stone-300 hover:text-gold-200'}`}
             >
               <Icon className="h-4 w-4" />
               {label}
@@ -427,6 +427,13 @@ export default function WorkspacePage() {
           engine={engineLabel}
         />
       </header>
+
+      <div className="flex items-center gap-x-4 gap-y-1 overflow-x-auto whitespace-nowrap border-b border-plum-700 bg-plum-850 px-4 py-2 text-xs text-stone-300 lg:hidden" aria-label="Design summary">
+        <span><b className="text-gold-300">{bedroomCount}</b> bed</span>
+        <span><b className="text-gold-300">{bathroomCount}</b> bath</span>
+        <span><b className="text-gold-300">{activeDesign.floorsCount}</b> floor{activeDesign.floorsCount === 1 ? '' : 's'}</span>
+        <span><b className="text-gold-300">{activeDesign.totalBuiltUpAreaSqFt || 0}</b> sq ft built-up</span>
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="scrollbar-plum hidden w-80 shrink-0 flex-col overflow-y-auto border-r border-plum-700 bg-plum-850 lg:flex">

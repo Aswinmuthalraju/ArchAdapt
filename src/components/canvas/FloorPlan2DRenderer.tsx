@@ -4,7 +4,7 @@ import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { StructuredDesignJSON, FloorPlanRoom } from '@/types/architectural';
 import { ZoomIn, ZoomOut, Maximize2, Ruler, X, Armchair } from 'lucide-react';
 import { floorName, inferRoomType } from '@/lib/design/roomTypes';
-import PlanSvg from './PlanSvg';
+import PlanSvg, { PLAN_CANVAS } from './PlanSvg';
 
 interface FloorPlan2DRendererProps {
   design: StructuredDesignJSON;
@@ -49,26 +49,49 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
     setPan({ x: 0, y: 0 });
   }, []);
 
+  /** Zoom and pan that frame the building (with a little of its plot) in the stage, whatever the plot size. */
+  const houseFit = useCallback(() => {
+    const solidRooms = design.rooms.filter((r) => inferRoomType(r) !== 'void');
+    if (!solidRooms.length) return null;
+    const plotW = design.plot?.width || 40;
+    const plotD = design.plot?.depth || 60;
+    const canvasFraction = (PLAN_CANVAS - 128) / PLAN_CANVAS / Math.max(plotW, plotD); // canvas share of one foot
+    const x0 = (Math.min(...solidRooms.map((r) => r.position.x)) / 100) * plotW;
+    const x1 = (Math.max(...solidRooms.map((r) => r.position.x + r.position.width)) / 100) * plotW;
+    const y0 = (Math.min(...solidRooms.map((r) => r.position.y)) / 100) * plotD;
+    const y1 = (Math.max(...solidRooms.map((r) => r.position.y + r.position.height)) / 100) * plotD;
+    const span = Math.max(x1 - x0, y1 - y0) * canvasFraction;
+    const zoomTo = clampZoom(Math.min(2.6, Math.max(1, 0.78 / span)));
+    const stage = stageRef.current;
+    const size = Math.min(stage?.clientWidth || 800, stage?.clientHeight || 800, 860);
+    // Centre of the building relative to the centre of the canvas, as a share of the canvas.
+    const dx = ((x0 + x1) / 2 - plotW / 2) * canvasFraction;
+    const dy = ((y0 + y1) / 2 - plotD / 2) * canvasFraction;
+    return { zoom: zoomTo, pan: { x: -dx * size * zoomTo, y: -dy * size * zoomTo } };
+  }, [design.rooms, design.plot?.width, design.plot?.depth]);
+
   const toggleFit = useCallback(() => {
     if (Math.abs(zoom - 1) > 0.08 || Math.abs(pan.x) > 8 || Math.abs(pan.y) > 8) {
       setZoom(1);
       setPan({ x: 0, y: 0 });
       return;
     }
-    const solidRooms = design.rooms.filter((r) => inferRoomType(r) !== 'void');
-    if (!solidRooms.length) return;
-    const x0 = Math.min(...solidRooms.map((r) => r.position.x));
-    const x1 = Math.max(...solidRooms.map((r) => r.position.x + r.position.width));
-    const y0 = Math.min(...solidRooms.map((r) => r.position.y));
-    const y1 = Math.max(...solidRooms.map((r) => r.position.y + r.position.height));
-    const houseW = (x1 - x0) / 100;
-    const houseH = (y1 - y0) / 100;
-    const targetZoom = clampZoom(Math.min(2.8, Math.max(1.3, 0.72 / Math.max(houseW, houseH))));
-    const cx = ((x0 + x1) / 200 - 0.5) * 800 * targetZoom;
-    const cy = ((y0 + y1) / 200 - 0.5) * 800 * targetZoom;
-    setZoom(targetZoom);
-    setPan({ x: -cx * 0.4, y: -cy * 0.4 });
-  }, [zoom, pan, design.rooms]);
+    const fit = houseFit();
+    if (!fit) return;
+    setZoom(fit.zoom);
+    setPan(fit.pan);
+  }, [zoom, pan, houseFit]);
+
+  // A new design opens already framed on the house, so a large plot never shows a tiny plan.
+  const framedFor = useRef<unknown>(null);
+  useEffect(() => {
+    if (framedFor.current === design) return;
+    framedFor.current = design;
+    const fit = houseFit();
+    if (!fit) return;
+    setZoom(fit.zoom);
+    setPan(fit.pan);
+  }, [design, houseFit]);
 
   // Wheel zoom needs a non-passive listener so the page does not scroll underneath.
   useEffect(() => {
