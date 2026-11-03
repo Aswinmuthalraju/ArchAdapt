@@ -11,6 +11,7 @@ import { createProjectInSupabase } from '@/lib/services/projectService';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { buildableEnvelope, defaultSetbacks } from '@/lib/design/layoutEngine';
+import { styleBySlug } from '@/lib/styles/styleCatalog';
 
 type Audience = 'homeowner' | 'architect';
 type Precheck =
@@ -93,6 +94,15 @@ export default function OnboardingPage() {
   }, [effectiveSite, siteInfo.plotWidth, siteInfo.plotDepth]);
 
   const preferences = useMemo(() => ({ modes: selectedModes, primaryStyle, ...(isArchitect && secondaryStyle ? { secondaryStyle } : {}) }), [selectedModes, primaryStyle, secondaryStyle, isArchitect]);
+
+  // A style page links here with ?style=<slug>; start on that style.
+  useEffect(() => {
+    try {
+      const slug = new URLSearchParams(window.location.search).get('style');
+      const match = slug ? styleBySlug(slug) : undefined;
+      if (match) setPrimaryStyle(match.name);
+    } catch { /* no query string available */ }
+  }, []);
 
   // ---- Live feasibility: the same deterministic layout the real generation uses, without the AI ----
   const [precheck, setPrecheck] = useState<Precheck>({ state: 'idle' });

@@ -12,7 +12,7 @@ type SceneProps = { state: ShowcaseState; reducedMotion: boolean; onSpace: (spac
 
 const C = { plaster: '#e6e2d7', stone: '#b7b3a3', wood: '#8f6443', frame: '#3b4038', leaf: '#667553', grass: '#84906b', fabric: '#e3d5bb' };
 
-const FLOWER_COLORS = ['#E0218A', '#F472B6', '#FBCFE8', '#FDA4AF', '#BE185D', '#EA4FA2'];
+const FLOWER_COLORS = ['#D590AE', '#E6B8CB', '#F4E0E9', '#EBB9BD', '#B97796', '#DDA3BC'];
 
 /** Sculpted 5-lobed blossom geometry with organic radial petal clefts */
 function build5PetalGeometry(radius = 0.16): THREE.ShapeGeometry {

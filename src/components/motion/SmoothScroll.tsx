@@ -7,7 +7,8 @@ import { gsap, lenisRef, prefersReducedMotion, ScrollTrigger } from '@/lib/motio
 /** Inertial scrolling for marketing pages, driven by GSAP's ticker so ScrollTrigger stays in sync. */
 export default function SmoothScroll() {
   useEffect(() => {
-    if (prefersReducedMotion()) return;
+    // Phones and tablets scroll natively: it is smoother there and keeps the browser's own momentum and rubber-banding.
+    if (prefersReducedMotion() || !window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
     const lenis = new Lenis({ lerp: 0.09, smoothWheel: true, wheelMultiplier: 0.9 });
     lenisRef.current = lenis;
     lenis.on('scroll', ScrollTrigger.update);

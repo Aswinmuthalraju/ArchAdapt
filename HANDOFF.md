@@ -8,7 +8,7 @@ This replaces the earlier hand-off. Every number below was re-measured on this b
 
 | Check | Command | Result |
 | :--- | :--- | :--- |
-| Unit and regression tests | `npm test` | 86 / 86 pass |
+| Unit and regression tests | `npm test` | 90 / 90 pass |
 | Types | `npx tsc --noEmit` | clean |
 | Lint | `npm run lint` | no warnings or errors |
 | Production build | `npm run build` | succeeds |
@@ -38,6 +38,15 @@ UI
 - Mobile workspace: the view tabs no longer wrap or clip, and a one-line summary (bedrooms, baths, floors, built-up area) shows on screens below the sidebar breakpoint, where the sidebar is hidden.
 
 Tests: two new tests (open courtyard on a large plot, bathroom size cap).
+
+## Product polish pass (style pages, mobile, colour)
+
+- Each of the eight styles now has its own page, `/styles/<slug>`, with an overview, an at-a-glance table, what defines it, what changes in the plan, a four-step "how we design it", the rooms it adds, and a "Design in this style" button that opens the form already set to that style (`/onboarding?style=<slug>`). The home gallery and the styles list link there. All copy lives in `src/lib/styles/styleCatalog.ts`.
+- The photographs of the eight styles are replaced by original vector illustrations (`StyleIllustration.tsx`). The Kerala photo was a worn-out house, and a clean, consistent set is lighter on phones and always matches the style. The old style photos are deleted from `public/images/styles`; credits updated.
+- Added `app/error.tsx` and `app/not-found.tsx` so a visitor never sees a raw crash screen.
+- Colour: the deep maroon plum (`#3B0A26`) is now a soft dusty plum (`#5D4052`); the hot pink blossom, magenta, petal canvas and the blossom branch artwork are muted roses. Tokens live in `tailwind.config.js` and `globals.css`.
+- Mobile: smooth-scroll (Lenis) now runs only on mouse devices, so phones scroll natively; the petal canvas draws 7 petals instead of 18 on phones; the blur on the header and endless decorative animations are switched off on touch screens. Page headings and the callout title were overflowing at 320 to 390 px and are fixed.
+- Checked at 320, 360, 390, 768, 1024, 1280 and 1920 px across ten pages: no horizontal overflow and no headline wider than the screen. Frame pacing under 4x CPU throttle in headless Chrome was a steady 60 fps on the four main marketing pages. That cannot show GPU cost on a real phone, so a test on a real phone is still worth doing.
 
 ## Corrections to the earlier hand-off
 

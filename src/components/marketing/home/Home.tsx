@@ -10,6 +10,8 @@ import CircleButton from '@/components/motion/CircleButton';
 import SplitText from '@/components/motion/SplitText';
 import { gsap, MQ, useGSAP } from '@/lib/motion';
 import Petals from './Petals';
+import StyleIllustration from '@/components/styles/StyleIllustration';
+import { STYLE_CATALOG } from '@/lib/styles/styleCatalog';
 import Preloader, { introReady } from './Preloader';
 
 const STEPS = [
@@ -19,16 +21,7 @@ const STEPS = [
 ];
 
 const img = (name: string) => `/images/styles/${name}.jpg`;
-const STYLES = [
-  { name: 'Kerala Traditional', note: 'Courtyards, deep eaves, monsoon roofs', img: img('kerala-traditional') },
-  { name: 'Modern', note: 'Clean lines and open plans', img: img('modern') },
-  { name: 'Minimalist', note: 'Compact cores, quiet materials', img: img('minimalist') },
-  { name: 'Contemporary', note: 'Sculpted volumes, shaded glass', img: img('contemporary') },
-  { name: 'Colonial', note: 'Symmetry, high ceilings, colonnades', img: img('colonial') },
-  { name: 'Tropical', note: 'Overhangs, light shafts, gardens', img: img('tropical') },
-  { name: 'Traditional Indian', note: 'Courtyards and jali screens', img: img('traditional-indian') },
-  { name: 'Modern Luxury', note: 'Double-height voids, private suites', img: img('modern-luxury') },
-];
+const STYLES = STYLE_CATALOG;
 
 const MODES = [
   { name: 'Climate-adaptive', text: 'Courtyards, cross-breezes and deep eaves placed for the weather where you build.', img: img('climate-adaptive') },
@@ -201,10 +194,10 @@ export default function Home({ plan }: { plan: ReactNode }) {
               </div>
             </article>
             {STYLES.map((style, i) => (
-              <Link key={style.name} href="/styles" className="gallery-card" data-cursor="View">
+              <Link key={style.slug} href={`/styles/${style.slug}`} className="gallery-card" prefetch={false} data-cursor="View">
                 <div className="gallery-card-media">
                   <div className="gallery-card-img">
-                    <Image src={style.img} alt="" fill sizes="(max-width: 899px) 78vw, 28vw" quality={70} />
+                    <StyleIllustration style={style} title={`${style.name} house`} />
                   </div>
                 </div>
                 <div className="gallery-card-meta">
