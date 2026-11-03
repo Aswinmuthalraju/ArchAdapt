@@ -5,7 +5,7 @@
 
 export type GeminiCallResult =
   | { ok: true; json: unknown; modelId: string }
-  | { ok: false; kind: 'NO_KEY' | 'UNAVAILABLE' | 'BAD_RESPONSE'; detail: string; modelId?: string };
+  | { ok: false; kind: 'NO_KEY' | 'UNAVAILABLE' | 'BAD_RESPONSE' | 'INPUT_REJECTED'; detail: string; modelId?: string };
 
 const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro'];
 const PER_CALL_TIMEOUT_MS = 90_000;
@@ -27,11 +27,14 @@ export function geminiApiKey(): string | null {
 
 // A key that just failed (quota, revoked, outage) is skipped for a minute so every request is not slowed by it.
 const coolingUntil = new Map<string, number>();
+/** Forgets which keys are cooling down (used by tests and after the configuration changes). */
+export const resetGeminiKeyState = () => coolingUntil.clear();
 const keysToTry = (): string[] => {
   const keys = geminiApiKeys();
   const now = Date.now();
   const ready = keys.filter((key) => (coolingUntil.get(key) || 0) <= now);
-  return ready.length ? ready : keys;
+  // Keys that are cooling down are still tried last, so a request never fails while an untried key exists.
+  return [...ready, ...keys.filter((key) => !ready.includes(key))];
 };
 const keyLabel = (key: string, all: string[]) => `key ${all.indexOf(key) + 1}`;
 
@@ -53,9 +56,15 @@ function extractJson(text: string): unknown {
 }
 
 /**
- * One generation call. Tries each configured model in turn only when the previous one could not be
- * reached (HTTP error, timeout, network failure). A model that answers with unusable content is
- * returned as BAD_RESPONSE so the caller can count it as a failed attempt instead of hiding it.
+ * One generation call with full failover. Every configured key is tried on every configured model, in order,
+ * and the next key (then the next model) is used whenever a call fails for ANY provider-side reason:
+ * quota / rate limit, revoked key, outage, timeout, network error, empty or blocked answer, cut-off or malformed JSON.
+ *
+ * Only two outcomes stop early:
+ *  - HTTP 400 "INVALID_ARGUMENT" means the request itself was rejected, so another key cannot help: it is returned as
+ *    INPUT_REJECTED so the caller can tell the user the input caused it (not the provider).
+ *  - the time budget is exhausted.
+ * Which key and model finally answered, and what failed before that, is reported so nothing is hidden.
  *
  * @param deadline epoch ms after which no further network call is started
  */
@@ -64,14 +73,17 @@ export async function callGeminiJson(systemPrompt: string, userPrompt: string, d
   if (!allKeys.length) return { ok: false, kind: 'NO_KEY', detail: 'No Gemini API key is configured on the server (GENAI_API_KEY).' };
 
   const failures: string[] = [];
+  let sawBadResponse: string | null = null;
   for (const modelId of geminiModels()) {
-    // Keys are tried in order for each model; the next key is used when one is rate limited, rejected or unreachable.
     for (const apiKey of keysToTry()) {
       const remaining = deadline - Date.now();
-      if (remaining < 15_000) {
+      if (remaining < 12_000) {
         failures.push(`${modelId}: skipped, time budget exhausted`);
-        return { ok: false, kind: 'UNAVAILABLE', detail: failures.join('; ') };
+        return sawBadResponse
+          ? { ok: false, kind: 'BAD_RESPONSE', detail: `${sawBadResponse} (other keys and models ran out of time)` }
+          : { ok: false, kind: 'UNAVAILABLE', detail: failures.join('; ') };
       }
+      const label = `${modelId} ${keyLabel(apiKey, allKeys)}`;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), Math.min(PER_CALL_TIMEOUT_MS, remaining));
       try {
@@ -82,42 +94,58 @@ export async function callGeminiJson(systemPrompt: string, userPrompt: string, d
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemPrompt }] },
             contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.35, thinkingConfig: { thinkingBudget: 1024 } }
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.35, maxOutputTokens: 24576, thinkingConfig: { thinkingBudget: 1024 } }
           })
         });
         if (!res.ok) {
           let message = '';
-          try { message = (await res.json())?.error?.message || ''; } catch { /* body not JSON */ }
-          failures.push(`${modelId} ${keyLabel(apiKey, allKeys)}: HTTP ${res.status}${message ? ` ${message.slice(0, 120)}` : ''}`);
-          // Quota, auth and server errors belong to the key or service; 404 and 400 belong to the model, so move on to the next model.
+          let status = '';
+          try { const body = await res.json(); message = body?.error?.message || ''; status = body?.error?.status || ''; } catch { /* body not JSON */ }
+          failures.push(`${label}: HTTP ${res.status}${message ? ` ${message.slice(0, 120)}` : ''}`);
           if ([401, 403, 429].includes(res.status) || res.status >= 500) coolingUntil.set(apiKey, Date.now() + KEY_COOLDOWN_MS);
-          if (res.status === 404 || res.status === 400) break;
-          continue;
+          // A malformed request is the same for every key: stop and say the input was the problem.
+          // (A bad key also answers 400 "API key not valid"; that one is the key's fault, so it moves on.)
+          if (res.status === 400 && !/api key/i.test(message) && !/FAILED_PRECONDITION/.test(status)) {
+            return { ok: false, kind: 'INPUT_REJECTED', detail: `The AI service rejected the request: ${message.slice(0, 200) || 'invalid argument'}`, modelId };
+          }
+          if (res.status === 400) coolingUntil.set(apiKey, Date.now() + KEY_COOLDOWN_MS);
+          continue; // next key, then next model
         }
-        coolingUntil.delete(apiKey);
         let data: any;
         try {
           data = await res.json();
         } catch {
-          return { ok: false, kind: 'BAD_RESPONSE', detail: `${modelId} returned a body that is not JSON.`, modelId };
+          sawBadResponse = `${label} returned a body that is not JSON.`;
+          failures.push(sawBadResponse);
+          continue;
         }
         const candidate = data?.candidates?.[0];
         const text = (candidate?.content?.parts || []).map((part: any) => part?.text || '').join('');
         if (!text) {
           const why = candidate?.finishReason || data?.promptFeedback?.blockReason || 'empty response';
-          return { ok: false, kind: 'BAD_RESPONSE', detail: `${modelId} returned no content (${why}).`, modelId };
+          sawBadResponse = `${label} returned no content (${why}).`;
+          failures.push(sawBadResponse);
+          continue;
         }
         try {
-          return { ok: true, json: extractJson(text), modelId };
+          const json = extractJson(text);
+          coolingUntil.delete(apiKey);
+          if (failures.length) console.warn(`[ARCHADAPT] Gemini failover: answered by ${label} after ${failures.length} failed call(s): ${failures.join(' | ')}`);
+          return { ok: true, json, modelId };
         } catch {
-          return { ok: false, kind: 'BAD_RESPONSE', detail: `${modelId} returned malformed JSON${candidate?.finishReason === 'MAX_TOKENS' ? ' (output was cut off)' : ''}.`, modelId };
+          sawBadResponse = `${label} returned malformed JSON${candidate?.finishReason === 'MAX_TOKENS' ? ' (output was cut off)' : ''}.`;
+          failures.push(sawBadResponse);
+          continue;
         }
       } catch (err: any) {
-        failures.push(`${modelId} ${keyLabel(apiKey, allKeys)}: ${err?.name === 'AbortError' ? 'timed out' : err?.message || 'network error'}`);
+        failures.push(`${label}: ${err?.name === 'AbortError' ? 'timed out' : err?.message || 'network error'}`);
       } finally {
         clearTimeout(timer);
       }
     }
   }
+  // Every key on every model failed. If at least one answered with unusable content, the planner is reachable
+  // but could not produce valid JSON, which the caller counts as a failed attempt and may retry with feedback.
+  if (sawBadResponse) return { ok: false, kind: 'BAD_RESPONSE', detail: failures.join('; ') };
   return { ok: false, kind: 'UNAVAILABLE', detail: failures.join('; ') || 'No Gemini model could be reached.' };
 }

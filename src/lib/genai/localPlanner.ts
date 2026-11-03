@@ -189,11 +189,13 @@ export function buildLocalProgram(
   const profile = getStyleProfile(normStyle, style);
 
   // ---------- Ground floor: arrival and public rooms ----------
-  const largeLiving = /large living|big living|spacious living/.test(text);
+  const plotArea = site.plotWidth * site.plotDepth;
+  const isLargePlot = plotArea >= 5000;
+  const largeLiving = /large living|big living|spacious living/.test(text) || isLargePlot;
   const living = add('room-living', profile.livingName, 'living', 0, 'front', coolSide, area('living', familyScale * (largeLiving ? 1.25 : 1)), {
-    features: [climate ? `Placed on the cooler ${compass[coolSide]} side` : 'Faces the road'].concat(largeLiving ? ['Enlarged as requested'] : [])
+    features: [climate ? `Placed on the cooler ${compass[coolSide]} side` : 'Faces the road'].concat(largeLiving ? ['Enlarged for plot'] : [])
   });
-  add('room-entrance', profile.entranceName, 'entrance', 0, 'front', coolSide, area('entrance', climate ? 1.2 : 1), {
+  add('room-entrance', isLargePlot ? 'Entrance Foyer' : profile.entranceName, 'entrance', 0, 'front', coolSide, area('entrance', isLargePlot ? 1.4 : climate ? 1.2 : 1), {
     attachedTo: living,
     features: climate ? ['Deep shaded threshold before the living room'] : ['Covered arrival']
   });
@@ -203,7 +205,7 @@ export function buildLocalProgram(
     });
   }
 
-  const hasDining = wants('dining') || !requiredSpaces.length;
+  const hasDining = wants('dining') || !requiredSpaces.length || isLargePlot;
   const diningBand: PlanBand = variant === 1 ? 'front' : 'middle';
   // In a single-storey courtyard house a bedroom flanks the court on the cool side, so dining sits in the centre beside it.
   const courtFlank = wants('courtyard') && floors === 1;
@@ -216,8 +218,8 @@ export function buildLocalProgram(
     relationships: dining ? [{ type: 'CONNECTED_TO', target: dining }] : [{ type: 'CONNECTED_TO', target: living }],
     features: budgetFirst ? ['Shares a plumbing wall with the utility'] : []
   });
-  if ((!budgetFirst || bedrooms >= 3) && !blueprint.omit?.includes('utility')) {
-    add('room-utility', 'Utility', 'utility', 0, kitchenBand, hotSide, area('utility'), { attachedTo: kitchen, required: false });
+  if ((!budgetFirst || bedrooms >= 3 || isLargePlot) && !blueprint.omit?.includes('utility')) {
+    add('room-utility', isLargePlot ? 'Utility Yard' : 'Utility', 'utility', 0, kitchenBand, hotSide, area('utility', isLargePlot ? 1.2 : 1), { attachedTo: kitchen, required: false });
   }
   if (wants('courtyard')) {
     add('room-courtyard', profile.courtyardName, 'courtyard', 0, 'middle', 'center', area('courtyard', climate ? 1.25 : 1), {
@@ -312,10 +314,10 @@ export function buildLocalProgram(
   }
 
   // ---------- Other requested rooms ----------
-  if (wants('storage')) add('room-store', 'Store', 'store', 0, smallRoomBand(0), 'center', area('store'), { relationships: [{ type: 'NEAR', target: kitchen }] });
-  if (wants('prayerRoom')) add('room-puja', 'Puja Room', 'puja', 0, smallRoomBand(0), 'center', area('puja'));
+  if (wants('storage') || (isLargePlot && !blueprint.omit?.includes('store'))) add('room-store', 'Store', 'store', 0, smallRoomBand(0), 'center', area('store'), { relationships: [{ type: 'NEAR', target: kitchen }] });
+  if (wants('prayerRoom') || (isLargePlot && (normStyle === 'kerala_traditional' || normStyle === 'traditional_indian'))) add('room-puja', 'Puja Room', 'puja', 0, smallRoomBand(0), 'center', area('puja'));
   if (wants('guestRoom')) add('room-guest', 'Guest Room', 'guest_room', 0, variant === 2 ? 'rear' : 'middle', hotSide, area('guest_room'));
-  if (wants('studyWorkspace')) {
+  if (wants('studyWorkspace') || (isLargePlot && bedrooms >= 3)) {
     // Life-Stage keeps the study on the ground floor so it can later become a bedroom.
     if (lifeStage || floors === 1) {
       add('room-study', lifeStage ? 'Study / Future Bedroom' : 'Study', 'study', 0, 'middle', coolSide, area('study', lifeStage ? 1.25 : 1), {
@@ -331,11 +333,11 @@ export function buildLocalProgram(
     const lounge = add(`room-lounge-${floor}`, 'Family Lounge', 'lounge', floor, 'middle', 'center', area('lounge', budgetFirst ? 0.75 : 1), {
       features: ['Landing that every room on this floor opens from']
     });
-    if (wants('balcony') && floor === 1) {
+    if ((wants('balcony') || isLargePlot) && floor === 1) {
       const frontRoom = rooms.find((room) => room.floor === floor && room.band === 'front' && ROOM_TYPE_SPECS[room.type].placement === 'major');
       add('room-balcony', 'Balcony', 'balcony', floor, 'front', frontRoom?.side || coolSide, area('balcony', frontRoom ? 1 : 1.6), {
         attachedTo: frontRoom?.id,
-        relationships: frontRoom ? [] : [{ type: 'ADJACENT_TO', target: lounge }],
+        relationships: frontRoom ? [] : [{ type: 'CONNECTED_TO', target: lounge }],
         features: climate ? ['Shades the wall below it'] : []
       });
     }

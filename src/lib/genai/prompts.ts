@@ -120,6 +120,8 @@ ROOM AREA RANGES (sq ft: minimum / typical)
 ${AUTHORABLE_TYPES.map((type) => `${type} ${ROOM_TYPE_SPECS[type].minArea}/${ROOM_TYPE_SPECS[type].targetArea}`).join(', ')}
 
 PROGRAMME RULES
+- Give rooms their normal areas from the ranges above. Do not inflate them to fill a large plot: the layout engine enlarges every room to suit the plot, so on a generous site the house grows with it.
+- PLOT GROWTH RULE (for plots >= 5,000 sq ft up to 30,000 sq ft): On large plots, the programme should grow sensibly into dedicated zones (foyer, family lounge, separate dining, utility yard, study/pooja per style) rather than merely stretching rooms. Maintain ground coverage between 20% and 45% with generous garden setbacks. Upper floors step in with purposeful private terraces rather than large filler hatched blocks.
 - Each zone of a floor holds at most about (envelope width / 9) rooms side by side; spread bedrooms across the front and rear zones of upper floors instead of lining them all up in one zone.
 - The entrance is attachedTo the living room. A utility is attachedTo the kitchen. An ensuite bathroom is attachedTo its bedroom; a shared bathroom has no attachedTo and belongs in the rear zone near the bedrooms.
 - On every upper floor include one "lounge" (landing/family room) in the middle zone; the upper rooms open from it.

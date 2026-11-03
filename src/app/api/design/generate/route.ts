@@ -2,23 +2,11 @@ import { NextResponse } from 'next/server';
 import { SiteInfo, LocationInfo, DesignRequirements, DesignPreferences } from '@/types/architectural';
 import { generateDesign } from '@/lib/design/pipeline';
 import { countBedrooms, countRoomsOfType } from '@/lib/design/roomTypes';
+import { validateBriefInput } from '@/lib/design/inputValidation';
 
 export const maxDuration = 180;
 
 const DEV = process.env.NODE_ENV !== 'production';
-const ORIENTATIONS = ['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'];
-
-function invalidInput(site: SiteInfo, requirements: DesignRequirements): string | null {
-  const inRange = (value: unknown, min: number, max: number) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
-  if (!inRange(site.plotWidth, 10, 1000) || !inRange(site.plotDepth, 10, 1000)) return 'Plot width and depth must be between 10 and 1000 ft.';
-  if (!ORIENTATIONS.includes(site.orientation)) return 'Road orientation is missing or invalid.';
-  if (!inRange(requirements.bedrooms, 1, 12)) return 'Bedrooms must be between 1 and 12.';
-  if (!inRange(requirements.bathrooms, 1, 12)) return 'Bathrooms must be between 1 and 12.';
-  if (!inRange(requirements.floors, 1, 4)) return 'Floors must be between 1 and 4.';
-  if (!requirements.spaces || typeof requirements.spaces !== 'object') return 'Requested spaces are missing.';
-  return null;
-}
-
 export async function POST(request: Request) {
   let body: any;
   try {
@@ -28,20 +16,94 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { site, location, requirements, preferences, engine } = body as {
+    const { site, location, requirements, preferences, engine, stream: shouldStream } = body as {
       site: SiteInfo;
       location: LocationInfo;
       requirements: DesignRequirements;
       preferences: DesignPreferences;
       engine?: 'auto' | 'local';
+      stream?: boolean;
     };
     if (!site || !requirements || !preferences) {
       return NextResponse.json({ success: false, status: 'BAD_REQUEST', error: 'Missing required site or requirements payload.' }, { status: 400 });
     }
-    const problem = invalidInput(site, requirements);
-    if (problem) return NextResponse.json({ success: false, status: 'BAD_REQUEST', error: problem }, { status: 400 });
+    const problems = validateBriefInput(site, requirements);
+    if (problems.length) return NextResponse.json({ success: false, status: 'BAD_REQUEST', error: problems[0], violatedConstraints: problems }, { status: 400 });
 
     if (DEV) console.log(`\n[ARCHADAPT] GENERATION START — ${requirements.bedrooms} bed / ${requirements.bathrooms} bath / ${requirements.floors} floor(s), ${site.plotWidth}x${site.plotDepth} ${site.orientation}, modes: ${(preferences.modes || []).join(',') || 'none'}`);
+
+    const isSse = shouldStream || request.headers.get('accept')?.includes('text/event-stream');
+
+    if (isSse) {
+      const encoder = new TextEncoder();
+      const readable = new ReadableStream({
+        async start(controller) {
+          const send = (event: string, data: any) => {
+            try {
+              controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+            } catch { /* stream closed by client */ }
+          };
+
+          try {
+            const outcome = await generateDesign({
+              site: { ...site, plotWidth: Number(site.plotWidth), plotDepth: Number(site.plotDepth) },
+              location: location || { name: 'Site', city: 'Site', country: 'India', lat: 0, lng: 0 },
+              requirements,
+              preferences: { ...preferences, modes: preferences.modes || [] },
+              engine: engine === 'local' ? 'local' : 'auto',
+              onStage: (stage, message) => send('stage', { stage, message })
+            });
+
+            if (outcome.status !== 'OK') {
+              send('failure', {
+                success: false,
+                status: outcome.status,
+                error: outcome.reason,
+                reason: outcome.reason,
+                violatedConstraints: outcome.violatedConstraints,
+                attempts: outcome.attempts,
+                canUseLocalEngine: outcome.canUseLocalEngine
+              });
+            } else {
+              const { design } = outcome;
+              send('complete', {
+                success: true,
+                status: 'OK',
+                design,
+                rationale: design.rationale,
+                aiModel: outcome.modelId,
+                engine: outcome.engine,
+                fallbackUsed: outcome.engine !== 'gemini',
+                notice: outcome.notice || null,
+                attempts: outcome.attempts,
+                validationWarnings: outcome.warnings,
+                layoutNotes: outcome.notes,
+                validation: {
+                  passed: true,
+                  requestedBedrooms: requirements.bedrooms,
+                  requestedFloors: requirements.floors,
+                  generatedBedrooms: countBedrooms(design),
+                  generatedBathrooms: countRoomsOfType(design, 'bathroom'),
+                  generatedFloors: design.floorsCount
+                }
+              });
+            }
+          } catch (err: any) {
+            send('error', { success: false, status: 'INTERNAL_ERROR', error: err?.message || 'Internal generation error' });
+          } finally {
+            try { controller.close(); } catch { /* ignore */ }
+          }
+        }
+      });
+
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive'
+        }
+      });
+    }
 
     const outcome = await generateDesign({
       site: { ...site, plotWidth: Number(site.plotWidth), plotDepth: Number(site.plotDepth) },

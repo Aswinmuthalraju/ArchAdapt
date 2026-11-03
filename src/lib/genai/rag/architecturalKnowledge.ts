@@ -1,4 +1,5 @@
 import { NormalizedStyle, normalizeStyleName } from '@/lib/design/styleNormalizer';
+import { STYLE_KNOWLEDGE } from './styleKnowledge';
 
 export interface ArchitecturalKnowledgeItem {
   id: string;
@@ -13,7 +14,7 @@ export interface ArchitecturalKnowledgeItem {
   avoid?: string[];
 }
 
-export const ARCHITECTURAL_KNOWLEDGE_BASE: ArchitecturalKnowledgeItem[] = [
+const CORE_KNOWLEDGE: ArchitecturalKnowledgeItem[] = [
   // ---------------- Kerala Traditional ----------------
   {
     id: 'kerala-plan', topic: 'Kerala Traditional: Nalukettu planning', category: 'style', styles: ['kerala_traditional'],
@@ -231,8 +232,50 @@ export const ARCHITECTURAL_KNOWLEDGE_BASE: ArchitecturalKnowledgeItem[] = [
       'The stair is entered at its foot landing from a living space or lobby, with clear headroom and a guarded well on the upper floor.',
       'Doors sit near a room corner so furniture can use the long walls; windows sit on outside walls or face a courtyard.'
     ]
+  },
+  {
+    id: 'vastu-principles', topic: 'Vastu Shastra: spatial orientation and zonation', category: 'planning',
+    keywords: ['vastu', 'orientation', 'puja', 'pooja', 'prayer', 'ishan', 'agni', 'nairuti', 'brahmasthan', 'kitchen'],
+    guidelines: [
+      'Puja room (prayer space) placed in the North-East (Ishan) corner for spiritual calm; keep away from shared bathroom walls.',
+      'Kitchen located in the South-East (Agni) quadrant with cooking platform oriented East.',
+      'Master bedroom placed in the South-West (Nairuti) corner for stability and privacy.',
+      'Central zone (Brahmasthan) kept light and uncluttered (courtyard, light well, or central circulation lobby).',
+      'Water elements and main entrances preferred in North/East; heavy storage and stairs placed in South or West.'
+    ]
+  },
+  {
+    id: 'climate-composite', topic: 'Regional Climate Adaptations: composite and hot-dry climates', category: 'climate',
+    keywords: ['composite', 'hot dry', 'arid', 'summer', 'winter', 'thermal mass', 'shading', 'jali'],
+    guidelines: [
+      'In hot-dry and composite climates, use thick thermal mass walls and shaded courtyards for diurnal cooling.',
+      'Minimize exposed glazing on West and South-West orientations; provide deep vertical fins or jali screens.',
+      'Courtyard stack effect purges daytime heat during cool evenings.'
+    ]
+  },
+  {
+    id: 'climate-cold-hilly', topic: 'Regional Climate Adaptations: cold and hilly climates', category: 'climate',
+    keywords: ['cold', 'hilly', 'mountain', 'insulation', 'solar gain', 'snow', 'roof'],
+    guidelines: [
+      'Maximize South-facing glazing for passive solar heat gain throughout winter.',
+      'Compact building envelope to minimize perimeter heat loss; buffer unheated spaces on North faces.',
+      'Steep sloping roofs for snow and rain runoff with insulated ceilings.'
+    ]
+  },
+  {
+    id: 'plot-growth-rule', topic: 'Plot-Size Programme Growth and Ground Coverage Rules', category: 'planning',
+    keywords: ['plot', 'large plot', 'growth', 'coverage', 'foyer', 'lounge', 'utility', 'garden', 'driveway'],
+    guidelines: [
+      'On large plots (>= 5,000 sq ft up to 30,000 sq ft), expand the architectural programme into dedicated functional spaces rather than merely enlarging room dimensions.',
+      'Add an entrance foyer, separate formal living and family lounge, dedicated dining room, kitchen utility yard, and attached studies/pooja.',
+      'Maintain sensible ground coverage between 20% and 45% for large plots, providing generous garden zones, driveways, and setback buffers.',
+      'Upper floor rooms should stack over ground-floor load-bearing walls where possible, stepping in with purposeful private terraces rather than large filler hatched blocks.'
+    ]
   }
 ];
+
+/** Core items plus the deeper per-style items for all eight styles. */
+export const ARCHITECTURAL_KNOWLEDGE_BASE: ArchitecturalKnowledgeItem[] = [...CORE_KNOWLEDGE, ...STYLE_KNOWLEDGE];
 
 const MODE_CATEGORY: Record<string, ArchitecturalKnowledgeItem['category']> = {
   climate_adaptive: 'climate',
@@ -248,19 +291,39 @@ const words = (text: string) => new Set(text.toLowerCase().split(/[^a-z]+/).filt
  * that style, so each tradition reaches the planner on its own terms. The chosen style's items always come
  * first, then the active modes, then style-neutral items that the client's own words point to.
  */
-export function retrieveKnowledge(query: string, modes: string[], styleName?: string, limit = 8): ArchitecturalKnowledgeItem[] {
+export function retrieveKnowledge(query: string, modes: string[], styleName?: string, limit = 16): ArchitecturalKnowledgeItem[] {
   const style = normalizeStyleName(styleName);
   const wantedCategories = new Set(modes.map((mode) => MODE_CATEGORY[mode] || mode));
+  const queryLower = query.toLowerCase();
   const queryWords = words(query);
+
   const scored = ARCHITECTURAL_KNOWLEDGE_BASE
     .filter((item) => !item.styles || item.styles.includes(style))
     .map((item) => {
-      const keywordHits = item.keywords.filter((keyword) => keyword.split(' ').every((part) => queryWords.has(part) || query.toLowerCase().includes(keyword))).length;
-      const score = (item.styles ? 100 : 0) + (wantedCategories.has(item.category) ? 50 : 0) + keywordHits * 5 + (item.category === 'circulation' ? 1 : 0);
+      let keywordHits = 0;
+      for (const kw of item.keywords) {
+        if (queryLower.includes(kw) || kw.split(' ').every((part) => queryWords.has(part))) {
+          keywordHits++;
+        }
+      }
+      let contentHits = 0;
+      const topicWords = words(item.topic);
+      for (const w of Array.from(queryWords)) {
+        if (topicWords.has(w)) contentHits += 2;
+      }
+
+      const isStyleItem = !!(item.styles && item.styles.includes(style));
+      const styleScore = isStyleItem ? 150 : 0;
+      const modeScore = wantedCategories.has(item.category) ? 60 : 0;
+      const keywordScore = keywordHits * 10 + contentHits * 3;
+      const baselineCategoryScore = item.category === 'circulation' ? 5 : item.category === 'planning' ? 8 : 0;
+
+      const score = styleScore + modeScore + keywordScore + baselineCategoryScore;
       return { item, score };
     })
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score);
+
   return scored.slice(0, limit).map(({ item }) => item);
 }
 
