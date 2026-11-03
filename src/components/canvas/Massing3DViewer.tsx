@@ -10,7 +10,7 @@ import { buildHouseGeometry, Box3D, HouseGeometry3D } from '@/lib/geometry/build
 import { getHouseMaterials, HouseMaterialSystem } from '@/lib/geometry/materials';
 import { floorName } from '@/lib/design/roomTypes';
 import AppearancePanel from '@/components/workspace/AppearancePanel';
-import { Palette, Home, LocateFixed } from 'lucide-react';
+import { Palette, Home, LocateFixed, Eye } from 'lucide-react';
 
 interface Massing3DViewerProps {
   design: StructuredDesignJSON;
@@ -298,6 +298,7 @@ export default function Massing3DViewer({ design, onAppearanceChange }: Massing3
   const [lightingMode, setLightingMode] = useState<LightingMode>('day');
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [showRoof, setShowRoof] = useState(true);
+  const [isWalkthrough, setIsWalkthrough] = useState(false);
   const [viewKey, setViewKey] = useState(0);
   const [localAppearance, setLocalAppearance] = useState<HouseAppearance>(design.appearance || DEFAULT_APPEARANCE);
 
@@ -320,7 +321,10 @@ export default function Massing3DViewer({ design, onAppearanceChange }: Massing3
   const distance = houseGeometry.recommendedCameraDistance;
   const reach = Math.max(houseGeometry.plotSize[0], houseGeometry.plotSize[2]);
   // The road is at -Z, so the default view looks at the front of the house from the road side.
-  const camPos: [number, number, number] = [houseGeometry.cameraTarget[0] + distance * 0.62, distance * 0.58, houseGeometry.cameraTarget[2] - distance * 0.78];
+  const orbitCamPos: [number, number, number] = [houseGeometry.cameraTarget[0] + distance * 0.62, distance * 0.58, houseGeometry.cameraTarget[2] - distance * 0.78];
+  const walkCamPos: [number, number, number] = [houseGeometry.cameraTarget[0], 1.7, houseGeometry.cameraTarget[2] - reach * 0.4];
+  const camPos = isWalkthrough ? walkCamPos : orbitCamPos;
+  const camTarget: [number, number, number] = isWalkthrough ? [houseGeometry.cameraTarget[0], 2.2, houseGeometry.cameraTarget[2]] : houseGeometry.cameraTarget;
   const floorLevels = Array.from({ length: houseGeometry.totalFloors }, (_, level) => level);
 
   return (
@@ -355,6 +359,11 @@ export default function Massing3DViewer({ design, onAppearanceChange }: Massing3
             Roof {showRoof ? 'on' : 'off'}
           </button>
 
+          <button onClick={() => { setIsWalkthrough((v) => !v); setViewKey((k) => k + 1); }} className={toolbarButton(isWalkthrough)} title="Toggle street eye-level view vs aerial orbit">
+            <Eye className="h-4 w-4" />
+            {isWalkthrough ? 'Walkthrough' : 'Orbit'}
+          </button>
+
           <button onClick={() => setIsAppearanceOpen((v) => !v)} aria-expanded={isAppearanceOpen} className={toolbarButton(isAppearanceOpen)}>
             <Palette className="h-4 w-4" />
             Appearance
@@ -373,7 +382,7 @@ export default function Massing3DViewer({ design, onAppearanceChange }: Massing3
             ))}
           </div>
 
-          <button onClick={() => setViewKey((k) => k + 1)} className={toolbarButton(false)} title="Return to the starting view" aria-label="Reset view">
+          <button onClick={() => { setIsWalkthrough(false); setViewKey((k) => k + 1); }} className={toolbarButton(false)} title="Return to the starting view" aria-label="Reset view">
             <LocateFixed className="h-4 w-4" />
           </button>
         </div>
@@ -391,17 +400,17 @@ export default function Massing3DViewer({ design, onAppearanceChange }: Massing3
         >
           <color attach="background" args={[scene.background]} />
           <fog attach="fog" args={[scene.background, distance * 1.8, distance * 5]} />
-          <PerspectiveCamera makeDefault position={camPos} fov={38} near={0.5} far={distance * 12} />
+          <PerspectiveCamera makeDefault position={camPos} fov={isWalkthrough ? 50 : 38} near={0.5} far={distance * 12} />
           <OrbitControls
             makeDefault
             enableDamping
             dampingFactor={0.09}
             rotateSpeed={0.7}
             zoomSpeed={0.8}
-            target={houseGeometry.cameraTarget}
-            minDistance={4}
+            target={camTarget}
+            minDistance={isWalkthrough ? 1.5 : 4}
             maxDistance={distance * 2.6}
-            minPolarAngle={0.15}
+            minPolarAngle={isWalkthrough ? 0.3 : 0.15}
             maxPolarAngle={Math.PI / 2.03}
           />
 

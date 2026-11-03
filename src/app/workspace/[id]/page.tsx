@@ -3,11 +3,36 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import FloorPlan2DRenderer from '@/components/canvas/FloorPlan2DRenderer';
-import Massing3DViewer from '@/components/canvas/Massing3DViewer';
-import VersionComparisonModal from '@/components/workspace/VersionComparisonModal';
-import DrawingSetPanel from '@/components/workspace/DrawingSetPanel';
-import ExportMenu from '@/components/workspace/ExportMenu';
+
+const Massing3DViewer = dynamic(() => import('@/components/canvas/Massing3DViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex flex-col items-center justify-center bg-stone-900/60 text-stone-400 gap-3">
+      <div className="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+      <span className="text-xs uppercase tracking-widest font-mono">Loading 3D Massing Engine…</span>
+    </div>
+  )
+});
+
+const VersionComparisonModal = dynamic(() => import('@/components/workspace/VersionComparisonModal'), {
+  ssr: false
+});
+
+const DrawingSetPanel = dynamic(() => import('@/components/workspace/DrawingSetPanel'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center p-8 text-stone-400">
+      <span className="text-xs uppercase tracking-widest font-mono animate-pulse">Loading Drawing Set…</span>
+    </div>
+  )
+});
+
+const ExportMenu = dynamic(() => import('@/components/workspace/ExportMenu'), {
+  ssr: false
+});
+
 import { analyseDesign, DEFAULT_LIMITS, PlanLimits } from '@/lib/pro/analysis';
 import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare } from 'lucide-react';
 import { Project, FloorPlanVersion, StructuredDesignJSON, WhatIfMessage } from '@/types/architectural';
@@ -442,15 +467,59 @@ export default function WorkspacePage() {
             </section>
           )}
 
-          <section className="border-b border-plum-700 p-5">
-            <h2 className={`${heading} mb-2`}>Why it&apos;s laid out this way</h2>
+          <section className="border-b border-plum-700 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className={`${heading}`}>Architectural Rationale</h2>
+              <span className="text-[10px] font-mono uppercase bg-plum-800 text-gold-300 px-2 py-0.5 border border-plum-600 rounded">
+                Architect Spec
+              </span>
+            </div>
             <p className="text-sm leading-relaxed text-stone-300">{activeDesign.rationale || currentVersion.rationale}</p>
             {(activeDesign.modeConsiderations || []).map((item) => (
-              <p key={item.mode} className="mt-2.5 text-xs leading-snug text-stone-400">
+              <p key={item.mode} className="mt-2 text-xs leading-snug text-stone-400">
                 <span className="font-semibold capitalize text-gold-300">{item.mode.replace(/_/g, ' ')}: </span>
                 {item.note}
               </p>
             ))}
+
+            {activeDesign.planExplanation && (
+              <details className="mt-3 group border border-plum-700 bg-plum-800/60 p-3 rounded text-xs">
+                <summary className="font-semibold text-gold-200 cursor-pointer flex items-center justify-between select-none">
+                  <span>Explain this plan (Zoning &amp; Sizing Specs)</span>
+                  <span className="text-stone-400 text-[10px] group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="mt-3 space-y-3 pt-2 border-t border-plum-700">
+                  <div>
+                    <h4 className="font-bold text-gold-300 text-[11px] uppercase tracking-wider mb-1">Spatial Zoning Rationale:</h4>
+                    <ul className="space-y-1 list-disc pl-4 text-stone-300">
+                      {activeDesign.planExplanation.zoneRationale.map((zr, i) => (
+                        <li key={i}>{zr}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gold-300 text-[11px] uppercase tracking-wider mb-1">Room Sizing &amp; Footprint:</h4>
+                    <ul className="space-y-1 list-disc pl-4 text-stone-300">
+                      {activeDesign.planExplanation.sizingRationale.map((sr, i) => (
+                        <li key={i}>{sr}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  {activeDesign.planExplanation.validationReport.checksPassed.length > 0 && (
+                    <div>
+                      <h4 className="font-bold text-emerald-400 text-[11px] uppercase tracking-wider mb-1">Validator Compliance Verification:</h4>
+                      <ul className="space-y-1 text-emerald-300 font-mono text-[10px]">
+                        {activeDesign.planExplanation.validationReport.checksPassed.map((cp, i) => (
+                          <li key={i} className="flex items-center gap-1.5">
+                            <span className="text-emerald-400">✓</span> {cp}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
           </section>
 
           <section className="flex-1 p-5">

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { StructuredDesignJSON, FloorPlanRoom } from '@/types/architectural';
-import { ZoomIn, ZoomOut, Maximize2, Ruler, X } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Ruler, X, Armchair } from 'lucide-react';
 import { floorName, inferRoomType } from '@/lib/design/roomTypes';
 import PlanSvg from './PlanSvg';
 
@@ -21,6 +21,7 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(true);
+  const [showFurniture, setShowFurniture] = useState(true);
   const [floor, setFloor] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
@@ -47,6 +48,27 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }, []);
+
+  const toggleFit = useCallback(() => {
+    if (Math.abs(zoom - 1) > 0.08 || Math.abs(pan.x) > 8 || Math.abs(pan.y) > 8) {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    const solidRooms = design.rooms.filter((r) => inferRoomType(r) !== 'void');
+    if (!solidRooms.length) return;
+    const x0 = Math.min(...solidRooms.map((r) => r.position.x));
+    const x1 = Math.max(...solidRooms.map((r) => r.position.x + r.position.width));
+    const y0 = Math.min(...solidRooms.map((r) => r.position.y));
+    const y1 = Math.max(...solidRooms.map((r) => r.position.y + r.position.height));
+    const houseW = (x1 - x0) / 100;
+    const houseH = (y1 - y0) / 100;
+    const targetZoom = clampZoom(Math.min(2.8, Math.max(1.3, 0.72 / Math.max(houseW, houseH))));
+    const cx = ((x0 + x1) / 200 - 0.5) * 800 * targetZoom;
+    const cy = ((y0 + y1) / 200 - 0.5) * 800 * targetZoom;
+    setZoom(targetZoom);
+    setPan({ x: -cx * 0.4, y: -cy * 0.4 });
+  }, [zoom, pan, design.rooms]);
 
   // Wheel zoom needs a non-passive listener so the page does not scroll underneath.
   useEffect(() => {
@@ -121,13 +143,21 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
             <Ruler className="h-4 w-4" />
             Dimensions
           </button>
+          <button
+            onClick={() => setShowFurniture((v) => !v)}
+            aria-pressed={showFurniture}
+            className={`flex h-9 items-center gap-1.5 border px-3 text-sm transition-colors ${showFurniture ? 'border-magenta-500 bg-magenta-50 font-medium text-magenta-700' : 'border-stone-300 bg-white/90 text-stone-700 hover:border-magenta-500'}`}
+          >
+            <Armchair className="h-4 w-4" />
+            Furniture
+          </button>
           <button className={button} onClick={() => setZoom((z) => clampZoom(z * 1.2))} title="Zoom in" aria-label="Zoom in">
             <ZoomIn className="h-4 w-4" />
           </button>
           <button className={button} onClick={() => setZoom((z) => clampZoom(z / 1.2))} title="Zoom out" aria-label="Zoom out">
             <ZoomOut className="h-4 w-4" />
           </button>
-          <button className={button} onClick={reset} title="Fit to view" aria-label="Fit to view">
+          <button className={button} onClick={toggleFit} title="Fit to view (click again to toggle house/plot)" aria-label="Fit to view">
             <Maximize2 className="h-4 w-4" />
           </button>
         </div>
@@ -178,6 +208,7 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
             theme="paper"
             selectedRoomId={selectedRoomId}
             showAnnotations={showAnnotations}
+            showFurniture={showFurniture}
             onRoomSelect={(room) => {
               if (drag.current?.moved) return;
               onRoomSelect?.(room);

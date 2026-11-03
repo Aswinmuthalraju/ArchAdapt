@@ -106,6 +106,7 @@ interface PlanSvgProps {
   selectedRoomId?: string;
   onRoomSelect?: (room: FloorPlanRoom) => void;
   showAnnotations?: boolean;
+  showFurniture?: boolean;
   /** Draw the road, plot boundary, setbacks and compass. Off for a clean artwork crop. */
   showSite?: boolean;
   /** Frame the viewBox tightly around the building instead of the whole plot. */
@@ -117,7 +118,7 @@ interface PlanSvgProps {
  * Pure drawing of one floor of the canonical design. Every mark comes from design.rooms, design.walls,
  * design.openings and design.stairs; nothing here invents or adjusts geometry.
  */
-export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId, onRoomSelect, showAnnotations = true, showSite = true, crop = false, className }: PlanSvgProps) {
+export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId, onRoomSelect, showAnnotations = true, showFurniture = true, showSite = true, crop = false, className }: PlanSvgProps) {
   const palette = PALETTES[theme];
   const uid = useId().replace(/:/g, '');
   const plotWidth = design.plot?.width || 40;
@@ -250,6 +251,38 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
             Road · plot faces {orientation}
           </text>
           <rect x={offsetX} y={offsetY} width={plotWidth * scale} height={plotDepth * scale} fill={palette.plot} stroke={palette.plotLine} strokeWidth="1.4" strokeDasharray="9 5" />
+
+          {/* Driveway and landscaped yard on larger plots */}
+          {plotWidth * plotDepth >= 2500 && (
+            <g pointerEvents="none" opacity="0.6">
+              {setbacks && setbacks.rear > 4 && (
+                <rect
+                  x={fx(setbacks.left)}
+                  y={fy(plotDepth - setbacks.rear)}
+                  width={(plotWidth - setbacks.left - setbacks.right) * scale}
+                  height={setbacks.rear * scale}
+                  fill={theme === 'paper' ? '#EBF2E6' : 'rgba(120,170,130,0.08)'}
+                />
+              )}
+              {(() => {
+                const groundRooms = design.rooms.filter((r) => (r.position.floorLevel || 0) === 0);
+                const driveTarget = groundRooms.find((r) => inferRoomType(r) === 'parking') || groundRooms.find((r) => inferRoomType(r) === 'entrance');
+                if (!driveTarget) return null;
+                const dx = px(driveTarget.position.x);
+                const dw = pw(driveTarget.position.width);
+                const dy0 = fy(0);
+                const dy1 = py(driveTarget.position.y);
+                if (dy1 <= dy0 + 4) return null;
+                return (
+                  <g>
+                    <rect x={dx} y={dy0} width={dw} height={dy1 - dy0} fill={theme === 'paper' ? '#E5E0D6' : 'rgba(255,255,255,0.06)'} stroke={palette.muted} strokeWidth="0.8" strokeDasharray="3 3" />
+                    <text x={dx + dw / 2} y={(dy0 + dy1) / 2 + 3} textAnchor="middle" fill={palette.muted} fontSize="8.5" fontFamily="var(--font-sans), sans-serif" letterSpacing="0.5">DRIVEWAY</text>
+                  </g>
+                );
+              })()}
+            </g>
+          )}
+
           {setbacks && (
             <rect
               x={fx(setbacks.left)}
@@ -330,7 +363,7 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
               </>
             )}
             {stair}
-            {(design.furniture || []).filter((f) => f.roomId === room.id).map((f) => {
+            {showFurniture && (design.furniture || []).filter((f) => f.roomId === room.id).map((f) => {
               const fx0 = px(f.x);
               const fy0 = py(f.y);
               const fw = pw(f.width);
