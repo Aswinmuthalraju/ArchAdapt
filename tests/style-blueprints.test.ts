@@ -96,3 +96,19 @@ test('a planner programme that ignores the style is rejected with an instruction
   assert.ok(checkStyleConformance(stripped, constraints).some((line) => /dressing/.test(line)));
   assert.equal(styleBlueprint('Kerala Traditional').planningType, 'courtyard_centered');
 });
+
+import { retrieveKnowledge } from '../src/lib/genai/rag/architecturalKnowledge';
+import { STYLE_BLUEPRINTS } from '../src/lib/design/styleBlueprints';
+
+test('RAG returns programme, site and checklist knowledge for every one of the eight styles, and only for that style', () => {
+  const styles = Object.keys(STYLE_BLUEPRINTS);
+  assert.equal(styles.length, 8);
+  for (const style of styles) {
+    const label = STYLE_BLUEPRINTS[style as keyof typeof STYLE_BLUEPRINTS].label;
+    const items = retrieveKnowledge('', [], label);
+    const own = items.filter((item) => item.styles?.includes(style as never));
+    assert.ok(own.length >= 5, `${label} only retrieved ${own.length} style items`);
+    for (const lens of ['programme', 'site', 'checklist']) assert.ok(own.some((item) => item.id.endsWith(lens)), `${label} is missing its ${lens} knowledge`);
+    assert.ok(items.every((item) => !item.styles || item.styles.includes(style as never)), `${label} retrieved another style's knowledge`);
+  }
+});

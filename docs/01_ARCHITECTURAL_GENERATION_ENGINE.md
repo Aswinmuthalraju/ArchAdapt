@@ -1,152 +1,138 @@
-# ARCHADAPT AI — Architectural Generation Engine 2.0, Multi-Concept Pipeline & Design Diversity Master Guide
+# ArchadaptAI V1.4 — Architectural Generation Engine & Spatial System Guide
 
 **Document ID:** `docs/01_ARCHITECTURAL_GENERATION_ENGINE.md`  
-**Version:** 2.0 (Consolidated Master Manual)  
+**Version:** V_1.4  
 **Status:** Verified, Tested & In Production  
 
 ---
 
-## 1. Executive Overview & Core Architectural Principles
+## 1. Architectural Philosophy & Engine Foundations
 
-ArchAdapt AI operates strictly on a **Core Generative AI** architectural pipeline. It rejects static template packing, random box placement, autonomous agent loops, and external CAD/MCP dependencies.
+ArchadaptAI generates structurally valid, livable residential architecture. It rejects unconstrained coordinate hallucination, box-packing heuristics, and slow autonomous agent loops in favour of a two-stage hybrid architecture:
 
-### The Canonical Pipeline Flow
-```
-User Requirements & Site Input
-              ↓
-Architectural Reasoning & Site Analysis
-              ↓
-Architectural Brief & Design DNA
-              ↓
-Spatial Graph & Adjacency Constraints
-              ↓
-Buildable Envelope & Building Footprint Pre-Calculation
-              ↓
-Functional Zoning & Circulation Spine
-              ↓
-Dynamic Room Placement & Proportions
-              ↓
-Openings (Doors at Interfaces, Orientation Windows, Stairs)
-              ↓
-Pure Validation & Constraint Verification
-              ↓
-Canonical StructuredDesignJSON (Single Source of Truth)
-              ↓
-Professional 2D SVG Renderer & Deterministic 3D Geometry Builder
-```
+1. **High-Level Spatial Reasoning (AI Planner / Built-in Solver):** Derives an architectural room programme—which spaces exist, their target areas, depth zoning (front, middle, rear), transverse side (left, center, right), and inter-room spatial relationships (adjacency, attachments, connectivity, acoustic privacy).
+2. **Deterministic Geometric Realisation & Validation:** A pure mathematical layout engine transforms the abstract room programme into exact coordinates, aligned load-bearing wall lines, door openings with swing arcs, orientation-sensitive windows, dog-legged stair wells, and stepped terraces.
 
----
-
-## 2. Gemini 2.5 Pro Model Integration & Contract
-
-### 2.1 Model Migration & Fallback Chain
-- **Primary Model:** `gemini-2.5-pro` (Google Generative AI API v1beta).
-- **Candidate Fallback Chain:**
-  1. `gemini-2.5-pro` (Primary complex architectural reasoning)
-  2. `gemini-1.5-pro` (Secondary high-context reasoning)
-  3. `gemini-1.5-flash` (Fast structured parsing fallback)
-  4. `dynamic-constraint-solver` (Deterministic spatial solver ensuring 100% offline availability)
-
-### 2.2 System Architectural Prompt & Structured JSON Output
-The prompt directs Gemini to act as a Senior Principal Architectural Design Engine. It requires deriving:
-- **`architecturalBrief`**: `planningIntent`, `siteResponse`, `orientationStrategy`, `publicPrivateStrategy`, `serviceStrategy`, `circulationStrategy`, `climateStrategy`, `accessibilityStrategy`, `styleStrategy`.
-- **`spatialGraph`**: `nodes`, `requiredAdjacencies`, `preferredAdjacencies`, `avoidAdjacencies`, `verticalConnections`, `indoorOutdoorConnections`.
-- **`footprint`**: `shapeType` (`courtyard_centered` | `l_shaped` | `compact_core` | `stepped` | `winged`), `footprintAreaSqFt`, `boundingWidth`, `boundingDepth`.
-- **`designSignature`**: `planningType`, `circulationType`, `privatePublicZoning`, `conceptVariant` (`A` | `B` | `C`), `orientationStrategy`.
-- **`rooms`**: Exact `position: { x, y, width, height, floorLevel }`, `dimensions`, `areaSqFt`, `zoningCategory`, `privacyLevel`, `connections`, and `features`.
-- **`openings`**: Main entry door, room doors with swing arcs, orientation-aware window sills, and staircase details.
-
----
-
-## 3. Root Cause Investigation & Elimination of Template Repetition
-
-### 3.1 Initial Problem Identified
-During early iterations, different styles (Kerala Traditional, Modern, Minimalist) produced visually identical room topologies (e.g. Living on left, Courtyard in center, Dining on right, Master suite bottom-left, Kitchen bottom-right).
-
-### 3.2 Diagnostic Findings
-1. **The `isClimate` Overwrite Bug:** In `modelAdapter.ts`, the condition `if (isKerala || isClimate || reqs.spaces.courtyard)` evaluated to `true` whenever `climate_adaptive` mode was active, forcing **all** styles into `planningType = 'courtyard_centered'` and executing a single hardcoded coordinate block (`x: 28, y: 10`, `x: 8, y: 24`, `x: 47, y: 24`, `x: 72, y: 24`).
-2. **Template Anchor Elimination:** Removed all fixed coordinate anchors and replaced them with dynamic proportional calculations driven strictly by `primaryStyle`, `conceptVariant`, plot setbacks, orientation, and room counts.
-3. **Pipeline Diff Tool:** Built `src/lib/debug/designPipelineDiff.ts` to automatically compare raw Gemini responses against final designs, guaranteeing that valid AI outputs pass through untouched without post-processor mutation.
-
----
-
-## 4. Spatial Topology Differentiation Matrix
-
-Evaluated on standard benchmark test input: **40 × 60 ft plot, Kochi, East-facing, 3 Bedrooms, 2 Bathrooms, 1 Parking, G+1, Family of 4**.
-
-| Spatial Element | Kerala Traditional (Concept 1) | Modern Contemporary (Concept 1) | Minimalist Grid (Concept 1) |
-| :--- | :--- | :--- | :--- |
-| **Footprint Shape** | `courtyard_centered` | `l_shaped` | `compact` |
-| **Planning Strategy** | `courtyard_centered` | `l_shaped` | `compact_core` |
-| **Circulation Type** | `central` | `peripheral` | `peripheral` |
-| **Entrance / Foyer** | `Verandah [x:28, y:10, w:44, h:12]` | `Glazed Canopy [x:10, y:8, w:32, h:14]` | `Vestibule [x:32, y:10, w:36, h:12]` |
-| **Formal Living** | `Formal Living [x:8, y:24, w:36, h:38]` | `Double-Height Living [x:10, y:24, w:50, h:40]` | `Integrated Core [x:12, y:24, w:76, h:38]` |
-| **Kitchen & Dining** | `Traditional Kitchen [x:60, y:64, w:34, h:30]` | `Modular Kitchen [x:62, y:51, w:30, h:41]` | `Linear Kitchen [x:55, y:64, w:33, h:28]` |
-| **Master Suite (Ground)** | `Ground Master Suite [x:8, y:64, w:48, h:30]` | `Contemporary Master [x:10, y:66, w:48, h:26]` | `Minimalist Suite [x:12, y:64, w:40, h:28]` |
-| **Courtyard / Outdoor** | `Nadumuttam [x:47, y:24, w:22, h:26]` | `Upper Balcony Terrace [x:8, y:54, w:44, h:32]` | `Upper Balcony Terrace [x:8, y:54, w:44, h:32]` |
-| **3D Roof Geometry** | `sloped_hipped_gable` (Pitched terracotta) | `flat_parapet` (Parapet cap rim) | `minimal_slab` (Clean thin slab) |
-| **Topology Check** | **✅ PASSED (Distinct Geometry)** | **✅ PASSED (Distinct Geometry)** | **✅ PASSED (Distinct Geometry)** |
-
----
-
-## 5. Intra-Style Multi-Concept Generation
-
-The engine supports generating multiple distinct architectural typologies (Concept 1, Concept 2, Concept 3) for the exact same site, style, and requirements.
-
-### Kerala Traditional Multi-Concept Variations:
-1. **Concept 1 (Variant A — Central Nadumuttam Core):**
-   - *Footprint:* `courtyard_centered`
-   - *Layout:* Front Verandah Sit-out (`x:28, y:10`), Formal Living on West (`x:8, y:24`), Central Nadumuttam Courtyard (`x:47, y:24, w:22, h:26`), Family Dining on East (`x:72, y:24`), Traditional Kitchen on South-East (`x:60, y:64`), Accessible Master Suite on South-West (`x:8, y:64`).
-2. **Concept 2 (Variant B — Offset Side Courtyard & Shaded Spine):**
-   - *Footprint:* `stepped`
-   - *Layout:* Side Verandah Sit-out (`x:50, y:10`), Formal Drawing Hall (`x:50, y:24`), Side Garden Nadumuttam Lightwell (`x:10, y:35, w:36, h:25`), Central Dining Pavilion (`x:10, y:10`), Kitchen on North-West (`x:10, y:64`), Master Suite on South-East (`x:50, y:64`).
-3. **Concept 3 (Variant C — Axial Traditional & Rear Garden Courtyard):**
-   - *Footprint:* `compact`
-   - *Layout:* Grand Entry Poomukham (`x:30, y:10`), Central Grand Living Hall (`x:25, y:24, w:50, h:38`), Open Dining & Kitchen Suite on East (`x:62, y:24`), Rear Shaded Garden Courtyard (`x:10, y:64, w:48, h:30`), Master Suite secluded on North-West (`x:10, y:24`).
-
-### Modern Contemporary Variations:
-1. **Concept 1 (Variant A):** L-Shaped Open Glazed Spine with double-height living (`x:10, y:24, w:50, h:40`), floating canopy porch, and modular kitchen.
-2. **Concept 2 (Variant B):** Layered Wing Pavilions with floating entrance deck and separate master wing.
-
----
-
-## 6. Hard Requirement Integrity Guarantees
-
-The system strictly enforces user requirements as non-negotiable constraints:
-- **Bedrooms Guarantee:** If the user specifies 3 bedrooms and G+1 (2 floors), the system enforces:
-  - Ground Floor (`level: 0`): 1 Master Bedroom Suite
-  - First Floor (`level: 1`): Upper Bedroom 2 + Upper Bedroom 3
-  - Total = exactly 3 Bedrooms across 2 Floors.
-- **No Silent Downgrades:** Rejects silent truncation (e.g. 3 BHK → 1 BHK or G+1 → single floor). If requirements exceed plot coverage, returns explicit feasibility explanations.
-
----
-
-## 7. Natural Language What-If vs Alternative Concept Routing
+Nothing reaches a renderer (2D or 3D) unless it passes 100% of architectural validation checks.
 
 ```
-User Message in Workspace Chat
-              ↓
-Natural Language Intent Classification (requestIntent.ts)
-   ├── "generate another concept" / "alternative layout"
-   │         ↓
-   │   GENERATE_ALTERNATIVE_CONCEPT
-   │         ↓
-   │   generateAlternativeConcept() (Bypasses applyDelta)
-   │         ↓
-   │   Produces new Concept Variant (A → B → C) with new DNA, Footprint, and Layout
-   │
-   └── "make kitchen 20% larger" / "add bedroom upstairs" / "change wall color"
-             ↓
-       MODIFY_CURRENT_DESIGN
-             ↓
-       applyWhatIfChange() & buildWhatIfPrompt()
-             ↓
-       Incremental delta updating target spaces while preserving unaffected rooms
+User Brief & Site Input (Plot W x D, Orientation, Setbacks, Rooms, Style, Modes)
+                                  ↓
+      Deterministic Feasibility Pre-Check (buildable envelope & min sizes)
+                                  ↓
+       RAG Architectural Knowledge Retrieval (Isolated per 8 styles, Vastu, Climate)
+                                  ↓
+        AI Spatial Planner (Gemini 2.5 Flash → 2.5 Pro with Multi-Key Failover)
+               [or Built-in Deterministic Rule Engine Fallback]
+                                  ↓
+                 Room Programme Validation & Style Conformance
+                                  ↓
+             Deterministic 2D Layout Engine (layoutProgram)
+        - Depth zoning: Front (public), Middle (service/stair), Rear (private)
+        - Aspect ratio capping (habitable <= 1.8:1)
+        - Large plot programme growth (20-45% ground coverage)
+        - Small plot setback porch integration (<= 1500 sq ft)
+        - Structural wall line alignment and purposeful upper floor terraces
+                                  ↓
+               Openings & Circulation Synthesis (openings.ts)
+        - Road-facing main entry door
+        - Foot-landing stair doors
+        - Direct passage-based access (no bedroom crossed)
+                                  ↓
+              Pure Validation Check (validateFloorPlan.ts)
+                                  ↓
+     Canonical StructuredDesignJSON (Schema Version 2, Single Source of Truth)
+               ↓                                              ↓
+  Professional 2D SVG Canvas                   Deterministic 3D Massing Viewer
+ (Pan/Zoom, Plot Context, Toggles)          (Merged Geometries, Demand Render, Walkthrough)
 ```
 
 ---
 
-## 8. Summary of Verification & Test Files
-- `scratch/testPipelineAudit.ts`: Tests pipeline diffs and topology matrices.
-- `scratch/testMultiConceptGeneration.ts`: Verifies 3 Kerala concepts, Modern, Minimalist, and hard requirement compliance.
-- `src/lib/debug/designPipelineDiff.ts`: Real-time diff tool logging raw vs final outputs in `docs/debug/`.
+## 2. Spatial Zoning & Circulation Rules
+
+### 2.1 Depth Zones (Bands)
+Every floor is divided into three depth zones relative to the road frontage:
+- **Front Zone:** Hosts public arrival (Entrance Porch, Foyer, Living Room). Oriented directly towards road access and primary daylight.
+- **Middle Zone:** Vertical circulation spine (Dog-legged staircase well), dining room, and service hubs (Kitchen, Utility, Courtyard / Nadumuttam / Chowk). Buffers formal reception from private suites.
+- **Rear Zone:** Acoustic and visual sanctuary housing master suites, secondary bedrooms, and quiet family spaces away from street noise.
+- **Upper Floors:** Stepped footprint with private bedroom suites opening onto a central family lounge, sharing ground-floor load-bearing wall alignments and stepping back into purposeful private terraces.
+
+### 2.2 Circulation & Accessibility Guarantees
+- **Private Room Isolation:** Every room must be reachable from circulation corridors or public lobbies without crossing through any bedroom or bathroom.
+- **Staircase Entry:** Doors and archways may only open onto the stair at its foot landing, never across active riser flights.
+- **Stair Connectivity:** Every floor level has direct, unblocked access to the vertical circulation staircase.
+- **Main Entry Orientation:** Main entry door is visibly oriented toward the road side.
+
+---
+
+## 3. Plot Sizing & Growth Rules
+
+### 3.1 Large Plots (>= 5,000 sq ft up to 30,000 sq ft)
+- **Programme Expansion:** Rather than over-stretching individual rooms into oversized boxes, large plots grow the programme into dedicated functional spaces:
+  - Entrance Foyer / Vestibule
+  - Separate Formal Living and Family Lounge
+  - Dedicated Dining Room independent of the Kitchen
+  - Utility Yard and Service Porch
+  - Study / Home Office and Pooja Room per style mandate
+- **Coverage Benchmarks:** Ground coverage is maintained between **20% and 45%**, preserving generous perimeter garden zones, vehicle driveways, and landscaped setback buffers.
+- **Aspect Ratio Capping:** All habitable rooms observe a strict aspect ratio cap ($\le 1.8:1$) to guarantee natural daylight penetration and natural furniture layout proportions.
+
+### 3.2 Small Urban Plots (<= 1,500 sq ft)
+- **Front Setback Porch Borrowing:** For compact urban plots, parking porches and front entrance steps may borrow into the front setback up to $5.5\text{ ft}$ (preserving statutory lot boundaries), allowing 30x40 2BR and 3BR G+1 briefs to fit without artificial bedroom downgrades.
+- **Compact Vertical Cores:** Utilises compact dog-legged stairs ($10.5\text{ ft}$ depth) and lean balconies ($3.0\text{ ft}$ depth).
+- **Infeasible Brief Handling:** If a brief truly cannot fit the envelope, the engine returns an exact shortfall in square feet and 2-3 concrete suggestions (e.g. add a floor, drop dedicated parking, reduce bedroom count).
+
+---
+
+## 4. AI Generation, RAG & Multi-Key Failover
+
+### 4.1 Multi-Key & Multi-Model Failover
+The Gemini client (`src/lib/genai/gemini.ts`) provides resilient failover across multiple API keys and models:
+- **Key Discovery:** Priority-ordered resolution across `GENAI_API_KEY`, `GENAI_API_KEY_2`, `GENAI_API_KEY_3`, and `GENAI_API_KEYS`.
+- **Model Waterfall:** Fast model first (`gemini-2.5-flash`), with fallback to strong reasoning (`gemini-2.5-pro`).
+- **Failure Resilience:** Catches rate limits (HTTP 429), timeouts, 404 bad model names, network aborts, and malformed JSON, automatically transitioning to the next ready key/model.
+- **Cooldown Cache:** Keys experiencing rate limits enter a temporary 60-second cooldown so consecutive calls are not stalled.
+- **Local Fallback:** If AI models are unavailable or budget expires, the built-in deterministic rule engine produces a validated plan labeled with a clear user notice.
+
+### 4.2 Retrieval-Augmented Generation (RAG)
+`src/lib/genai/rag/` provides domain knowledge across 8 architectural traditions:
+1. **Kerala Traditional:** Nalukettu planning, central Nadumuttam, Poomukham arrival, Charupadi seating, sloped clay tile roofs.
+2. **Traditional Indian:** Chowk / Aangan courtyard, Baithak guest reception, Jali screens, Ishan/Agni Vastu alignment.
+3. **Colonial:** Symmetrical axial portico, central drawing hall, formal dining, tall shuttered bays, hipped roofs.
+4. **Tropical:** Cross-ventilated single-depth wings, breeze porches, timber louvres, deep eaves.
+5. **Modern:** Open-plan living-dining-kitchen spine, floor-to-ceiling garden glazing, flat parapet roofs.
+6. **Minimalist:** Pure rectilinear volume, concealed full-height joinery, uncluttered cellular discipline.
+7. **Contemporary:** Asymmetric L-shaped massing, stepped upper terraces, home office, mixed cladding.
+8. **Modern Luxury:** Grand double-height living, ensuite bathrooms for all bedrooms, master dressing suite, multi-car parking.
+
+Each style maintains strict retrieval isolation: unit tests guarantee that requesting knowledge for one style returns that style's programme, site, and checklist rules and zero items from any other tradition.
+
+---
+
+## 5. Streaming Progress & Architect Explanations
+
+### 5.1 Real-Time Stage Streaming
+`/api/design/generate` supports Server-Sent Events (SSE) streaming progress stages to the client:
+1. `checking_brief`: Verifying site setbacks and dimensional feasibility.
+2. `planning`: Reasoning about spatial zoning and orientation.
+3. `laying_out`: Synthesizing room geometry, walls, openings and stair core.
+4. `validating`: Executing pure architectural and structural checks.
+5. `saving`: Persisting validated design and version metadata.
+
+### 5.2 Architect "Explain This Plan" Specification
+Every generated design carries a structured `planExplanation` object detailing:
+- **Spatial Zoning Rationale:** Functional reasoning behind front, middle, and rear depth zoning.
+- **Room Sizing & Footprint:** Ground coverage ratio, plot utilization, and NBC guideline adherence.
+- **Validator Compliance Report:** Proof of passing road-facing main door, stair connectivity, private circulation, and aspect ratio constraints.
+
+---
+
+## 6. Verification & Test Suite
+
+The engine is protected by a comprehensive test suite covering 84 automated tests across:
+- **Architectural Regressions:** Aspect ratios, courtyard enclosures, stair landings, openings.
+- **Sweep Matrix:** 224 combinations across 8 styles $\times$ 7 plots $\times$ 4 briefs.
+- **Gemini Failover:** Rate limiting, malformed response handling, timeouts, model fallback.
+- **Style Isolation:** Strict zero-leakage RAG retrieval across all 8 architectural styles.
+- **Export & Canvas Integrity:** SVG rendering, DXF export, OBJ 3D export, and CSV area schedules.
