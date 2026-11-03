@@ -27,6 +27,7 @@ export interface SiteInfo {
   totalArea: number; // sq ft
   orientation: 'N' | 'S' | 'E' | 'W' | 'NE' | 'NW' | 'SE' | 'SW';
   setbacks?: SiteSetbacks;
+  allowPorchInSetback?: boolean; // when true, car porch may sit within front setback (default true for plots <= 2000 sq ft)
   fileUrl?: string;
   notes?: string;
 }
@@ -324,6 +325,7 @@ export interface StructuredDesignJSON {
     orientation: string;
     roadSide: 'N' | 'S' | 'E' | 'W';
     setbacks?: SiteSetbacks;
+    allowPorchInSetback?: boolean;
   };
   buildableAreaSqFt?: number;
   totalBuiltUpAreaSqFt: number;
@@ -345,6 +347,16 @@ export interface StructuredDesignJSON {
   designSignature?: DesignSignature;
   appearance?: HouseAppearance;
   generationMetadata?: DesignGenerationMetadata;
+  planExplanation?: {
+    zoneRationale: string[];
+    sizingRationale: string[];
+    validationReport: {
+      isValid: boolean;
+      errors: string[];
+      warnings: string[];
+      checksPassed: string[];
+    };
+  };
 }
 
 export interface VersionDelta {

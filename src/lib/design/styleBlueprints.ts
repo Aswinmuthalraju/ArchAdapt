@@ -28,6 +28,8 @@ export interface StyleBlueprint {
   circulationType: DesignProgram['circulationType'];
   /** The tradition's own name for its courtyard, used when telling the client it was left out. */
   courtyardTerm?: string;
+  /** How far rooms may grow on a generous plot, relative to the neutral standard (1 = as far as the plot allows). */
+  growthBias: number;
   /** Smallest entrance/threshold area (sq ft) that carries the style's arrival sequence. */
   minEntranceArea: number;
   /** Instructions given to the AI planner so its programme carries the style. */
@@ -44,6 +46,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     planningType: 'courtyard_centered',
     circulationType: 'central',
     courtyardTerm: 'Nadumuttam',
+    growthBias: 1,
     minEntranceArea: 60,
     directives: [
       'Arrival is a deep Poomukham (sit-out) verandah: the "entrance" room must be generous (at least 60 sq ft) and attached to the living room.',
@@ -61,6 +64,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     planningType: 'courtyard_centered',
     circulationType: 'central',
     courtyardTerm: 'Chowk',
+    growthBias: 1,
     minEntranceArea: 50,
     directives: [
       'Organise the house around a central "courtyard" (the Chowk/Aangan) on floor 0; the rooms form a ring around it. Use planningType "courtyard_centered".',
@@ -77,6 +81,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     areaFactor: { entrance: 2.1, living: 1.25, dining: 1.3, master_bedroom: 1.15, bedroom: 1.1, study: 1.3, balcony: 1.3 },
     planningType: 'zoned_wings',
     circulationType: 'central',
+    growthBias: 1.1,
     minEntranceArea: 75,
     directives: [
       'Formal symmetrical planning: a colonnaded portico ("entrance", at least 75 sq ft) opens to a grand "living" room, with "dining" directly beyond. Use planningType "zoned_wings".',
@@ -94,6 +99,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     planningType: 'courtyard_centered',
     circulationType: 'peripheral',
     courtyardTerm: 'open-to-sky court',
+    growthBias: 1,
     minEntranceArea: 55,
     directives: [
       'Indoor and outdoor must interlock: include an open-to-sky "courtyard" on floor 0, a generous "balcony"/veranda (at least 70 sq ft) and leave open garden area on the plot. Use circulationType "peripheral" so passages run along open edges.',
@@ -110,6 +116,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     omit: ['utility'],
     planningType: 'compact_core',
     circulationType: 'spine',
+    growthBias: 0.3,
     minEntranceArea: 28,
     directives: [
       'Compact, efficient and quiet: use planningType "compact_core" and circulationType "spine". Keep every room at the lower-to-middle end of its range.',
@@ -125,6 +132,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     areaFactor: { living: 1.15, kitchen: 1.05, dining: 1.05, entrance: 0.9 },
     planningType: 'linear_circulation',
     circulationType: 'spine',
+    growthBias: 0.9,
     minEntranceArea: 28,
     directives: [
       'Open and orthogonal: use planningType "linear_circulation" and circulationType "spine". Make the living room the largest room, with dining and kitchen flowing from it.',
@@ -139,6 +147,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     areaFactor: { living: 1.2, lounge: 1.2, balcony: 1.5, study: 1.2, entrance: 1.0 },
     planningType: 'l_shaped',
     circulationType: 'peripheral',
+    growthBias: 0.95,
     minEntranceArea: 35,
     directives: [
       'Asymmetric, sculptural planning: use planningType "l_shaped" and circulationType "peripheral". Stagger the upper-floor rooms relative to the ground floor so the massing steps.',
@@ -157,6 +166,7 @@ const BLUEPRINTS: Record<NormalizedStyle, StyleBlueprint> = {
     minParkingCars: 2,
     planningType: 'zoned_wings',
     circulationType: 'central',
+    growthBias: 1.15,
     minEntranceArea: 80,
     directives: [
       'Generous, private and ceremonial: use planningType "zoned_wings". A grand "entrance" (at least 80 sq ft) leads to a very large "living" room (260+ sq ft).',

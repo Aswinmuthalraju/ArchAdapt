@@ -140,6 +140,9 @@ export async function POST(request: Request) {
       notice = outcome.notice || null;
     } else {
       const outcome = await runWhatIf(currentDesign, message);
+      if (outcome.status === 'INPUT_REJECTED') {
+        return NextResponse.json({ success: false, isFeasible: false, status: outcome.status, intent, explanation: outcome.reason, error: outcome.reason }, { status: 422 });
+      }
       if (outcome.status === 'ENGINE_UNAVAILABLE') {
         return NextResponse.json({ success: false, isFeasible: false, status: outcome.status, intent, explanation: outcome.reason, violatedConstraints: [] }, { status: 503 });
       }

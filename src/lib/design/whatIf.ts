@@ -29,6 +29,7 @@ export type WhatIfOutcome =
       geometryChanged: boolean;
     }
   | { status: 'INFEASIBLE'; reason: string; violatedConstraints: string[]; summary: string; engine: string }
+  | { status: 'INPUT_REJECTED'; reason: string }
   | { status: 'NOT_UNDERSTOOD'; reason: string }
   | { status: 'ENGINE_UNAVAILABLE'; reason: string };
 
@@ -43,6 +44,7 @@ export function siteFromDesign(design: StructuredDesignJSON): SiteInfo {
     plotDepth: design.plot.depth,
     totalArea: design.plot.totalArea || design.plot.width * design.plot.depth,
     orientation: design.plot.orientation as SiteInfo['orientation'],
+    allowPorchInSetback: design.plot.allowPorchInSetback,
     // Only canonical designs carry setbacks the layout engine chose; older ones get the standard rule.
     setbacks: (design.schemaVersion || 1) >= 2 ? design.plot.setbacks : undefined
   };
@@ -405,6 +407,8 @@ export async function runWhatIf(design: StructuredDesignJSON, message: string): 
         } else {
           delta = parsed.delta;
         }
+      } else if (call.kind === 'INPUT_REJECTED') {
+        return { status: 'INPUT_REJECTED', reason: call.detail };
       } else if (call.kind === 'BAD_RESPONSE') {
         feedback = [`${call.detail} Return one valid JSON object.`];
         lastFailure = { status: 'NOT_UNDERSTOOD', reason: call.detail };

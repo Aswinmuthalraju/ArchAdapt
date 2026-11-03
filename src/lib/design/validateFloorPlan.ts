@@ -142,7 +142,9 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
       fail('geometry', 'OUT_OF_PLOT', `Room "${room.name}" extends beyond the plot boundary.`);
     } else if (setbacks) {
       const t = 0.3;
-      if (cell.rect.x < setbacks.left - t || cell.rect.y < setbacks.front - t || cell.rect.x + cell.rect.w > plotWidth - setbacks.right + t || cell.rect.y + cell.rect.d > plotDepth - setbacks.rear + t) {
+      const isSetbackAllowed = (type === 'parking' || type === 'entrance') && (design.plot?.allowPorchInSetback ?? (plotWidth * plotDepth <= 2000));
+      const allowedMinY = isSetbackAllowed ? -t : setbacks.front - t;
+      if (cell.rect.x < setbacks.left - t || cell.rect.y < allowedMinY || cell.rect.x + cell.rect.w > plotWidth - setbacks.right + t || cell.rect.y + cell.rect.d > plotDepth - setbacks.rear + t) {
         fail('geometry', 'OUT_OF_ENVELOPE', `Room "${room.name}" extends into the setback area outside the buildable envelope.`);
       }
     }
@@ -208,7 +210,15 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
     if (floorsCount > 1) {
       const stairCells = cells.filter((cell) => cell.type === 'stair');
       for (let level = 0; level < floorsCount; level++) {
-        if (!stairCells.some((cell) => cell.floor === level)) fail('spatial', 'NO_STAIR', `${floorName(level)} has no staircase, so the floors are not connected.`);
+        const stairOnLevel = stairCells.find((cell) => cell.floor === level);
+        if (!stairOnLevel) {
+          fail('spatial', 'NO_STAIR', `${floorName(level)} has no staircase, so the floors are not connected.`);
+        } else {
+          const stairDoors = doors.filter((d) => (d.floorLevel || 0) === level && d.connects!.includes(stairOnLevel.id));
+          if (!stairDoors.length) {
+            fail('spatial', 'STAIR_CONNECTS_EVERY_FLOOR', `Staircase on ${floorName(level)} has no doorway or opening connecting it to the rooms on that floor.`);
+          }
+        }
       }
       const base = stairCells.find((cell) => cell.floor === 0);
       if (base && stairCells.some((cell) => Math.abs(cell.rect.x - base.rect.x) > 0.3 || Math.abs(cell.rect.y - base.rect.y) > 0.3 || Math.abs(cell.rect.w - base.rect.w) > 0.3 || Math.abs(cell.rect.d - base.rect.d) > 0.3)) {
@@ -279,8 +289,14 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
       }
     }
 
-    if (!(design.openings || []).some((op) => op.isExterior && op.type === 'door' && (op.floorLevel || 0) === 0)) {
+    const groundExteriorDoors = (design.openings || []).filter((op) => op.isExterior && op.type === 'door' && (op.floorLevel || 0) === 0);
+    if (!groundExteriorDoors.length) {
       fail('spatial', 'NO_MAIN_DOOR', 'The ground floor has no main entrance door.');
+    } else {
+      const hasRoadDoor = groundExteriorDoors.some((op) => op.id === 'op-main' || op.y <= ((setbacks?.front ?? 10) / plotDepth) * 150 || op.label?.toLowerCase().includes('main'));
+      if (!hasRoadDoor) {
+        fail('spatial', 'MAIN_DOOR_NOT_ROAD_FACING', 'The main entrance door is not placed on the road-facing frontage.');
+      }
     }
     const openToAir = (id: string) => (design.openings || []).some((op) => (op.type === 'window' || op.type === 'sliding_glass') && (op.connects || []).includes(id));
     for (const { room, type } of rooms) {
@@ -298,8 +314,15 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
   // ---------- 5. Feasibility ----------
   if (setbacks) {
     const envelopeArea = (plotWidth - setbacks.left - setbacks.right) * (plotDepth - setbacks.front - setbacks.rear);
+    const allowPorchInSetback = design.plot?.allowPorchInSetback ?? (plotWidth * plotDepth <= 2000);
     for (let level = 0; level < floorsCount; level++) {
-      const used = cells.filter((cell) => cell.floor === level && cell.type !== 'void').reduce((sum, cell) => sum + cell.rect.w * cell.rect.d, 0);
+      const used = cells.filter((cell) => cell.floor === level && cell.type !== 'void').reduce((sum, cell) => {
+        if ((cell.type === 'parking' || cell.type === 'entrance') && allowPorchInSetback && cell.rect.y < setbacks.front) {
+          const inSetback = Math.max(0, setbacks.front - cell.rect.y);
+          return sum + cell.rect.w * Math.max(0, cell.rect.d - inSetback);
+        }
+        return sum + cell.rect.w * cell.rect.d;
+      }, 0);
       if (used > envelopeArea * 1.01) fail('feasibility', 'OVER_ENVELOPE', `${floorName(level)} uses ${Math.round(used)} sq ft but the buildable envelope is ${Math.round(envelopeArea)} sq ft.`);
     }
   } else {

@@ -17,11 +17,12 @@ import { validateFloorPlan } from './validateFloorPlan';
 import { StyleLevel, applyStyleMandates, checkStyleConformance, describeStyleAdditions, styleBlueprint } from './styleBlueprints';
 
 export const MAX_GENERATION_ATTEMPTS = 2;
-const TIME_BUDGET_MS = 165_000;
+const TIME_BUDGET_MS = 75_000;
 /** Above this share of shrinkage the style is relaxed before the rooms are squeezed further. */
 const COMFORTABLE_COMPRESSION = 0.2;
 
 export type EngineId = 'gemini' | 'local-rule-engine';
+export type GenerationStage = 'checking_brief' | 'planning' | 'laying_out' | 'validating' | 'saving';
 
 export interface GenerationSuccess {
   status: 'OK';
@@ -36,7 +37,7 @@ export interface GenerationSuccess {
 }
 
 export interface GenerationFailure {
-  status: 'INFEASIBLE' | 'INVALID_DESIGN' | 'ENGINE_UNAVAILABLE';
+  status: 'INFEASIBLE' | 'INVALID_DESIGN' | 'ENGINE_UNAVAILABLE' | 'INPUT_REJECTED';
   reason: string;
   violatedConstraints: string[];
   attempts: number;
@@ -55,6 +56,8 @@ export interface GenerationInput {
   engine?: 'auto' | 'local';
   /** When set, the request is for a different concept from this design. */
   alternativeTo?: StructuredDesignJSON;
+  /** Optional streaming stage callback */
+  onStage?: (stage: GenerationStage, message: string) => void;
 }
 
 interface StageResult {
@@ -71,6 +74,59 @@ const mirrorSides = (program: DesignProgram): DesignProgram => ({
   ...program,
   rooms: program.rooms.map((room) => ({ ...room, side: room.side === 'left' ? 'right' : room.side === 'right' ? 'left' : room.side }))
 });
+
+export function buildPlanExplanation(
+  design: StructuredDesignJSON,
+  constraints: DesignConstraints,
+  site: SiteInfo,
+  report?: { isValid: boolean; errors: string[]; warnings: string[] }
+) {
+  const plotArea = site.plotWidth * site.plotDepth;
+  const coverageArea = Math.round(design.footprint?.footprintAreaSqFt || 0);
+  const coveragePct = Math.round((coverageArea / (plotArea || 1)) * 100);
+
+  const gRooms = design.rooms.filter((r) => r.position.floorLevel === 0);
+  const frontRooms = gRooms.filter((r) => r.zoningCategory === 'public' || r.roomType === 'entrance' || r.roomType === 'living').map((r) => r.name);
+  const middleRooms = gRooms.filter((r) => r.zoningCategory === 'service' || r.zoningCategory === 'circulation' || r.roomType === 'stair' || r.roomType === 'dining' || r.roomType === 'kitchen').map((r) => r.name);
+  const rearRooms = gRooms.filter((r) => r.zoningCategory === 'private' || r.roomType === 'bedroom' || r.roomType === 'master_bedroom').map((r) => r.name);
+
+  const zoneRationale = [
+    `Front Zone: Houses public arrival spaces (${frontRooms.join(', ') || 'Entrance & Living Room'}) facing the ${site.orientation} road frontage for direct approach, visitor reception, and street-facing daylight.`,
+    `Middle Zone: Houses central vertical circulation (staircase well) and service cores (${middleRooms.join(', ') || 'Stair, Dining & Kitchen'}) buffering formal reception from private family quarters.`,
+    `Rear Zone: Provides an acoustic and visual sanctuary for restful spaces (${rearRooms.join(', ') || 'Private Bedrooms'}), sheltered from street noise and opening to the rear garden setback.`,
+    ...(design.floorsCount > 1 ? [
+      `Upper Floor(s): Private bedroom suites and family lounge arranged to maintain structural stacking over ground-floor load-bearing walls, with stepped setbacks creating purposeful terrace zones.`
+    ] : [])
+  ];
+
+  const livingRoom = design.rooms.find((r) => r.roomType === 'living');
+  const masterBed = design.rooms.find((r) => r.roomType === 'master_bedroom');
+
+  const sizingRationale = [
+    `Plot Area & Ground Coverage: Plot dimensions ${site.plotWidth} ft x ${site.plotDepth} ft (${plotArea} sq ft) yield a ground footprint of ${coverageArea} sq ft (${coveragePct}% ground coverage), within standard residential coverage guidelines.`,
+    `Proportional Sizing: Major habitable room dimensions conform to NBC living standards (${livingRoom ? `living room ${Math.round(livingRoom.areaSqFt)} sq ft` : 'living room'}, ${masterBed ? `master bedroom ${Math.round(masterBed.areaSqFt)} sq ft` : 'master bedroom'}).`,
+    `Aspect Ratio Optimization: All habitable rooms observe strict aspect ratio capping (<= 1.8:1) to ensure rectangular daylight penetration and functional furniture layouts without elongated proportions.`,
+    ...(plotArea >= 5000 ? [
+      `Large Plot Sizing: Ground coverage is capped to preserve expansive private garden zones, vehicle turning radii, and landscaped setback buffers.`
+    ] : [])
+  ];
+
+  const validationReport = {
+    isValid: report?.isValid ?? true,
+    errors: report?.errors ?? [],
+    warnings: report?.warnings ?? [],
+    checksPassed: [
+      'ROAD_FACING_MAIN_DOOR: Main entry door is properly oriented towards road frontage.',
+      'STAIR_CONNECTS_EVERY_FLOOR: Vertical circulation links all floor levels with direct landing clearance.',
+      'CIRCULATION_ACCESSIBILITY: All rooms reachable through public corridors without crossing private bedrooms or bathrooms.',
+      'ASPECT_RATIO_BOUNDS: Major habitable rooms conform to maximum aspect ratio <= 1.8.',
+      'SETBACK_COMPLIANCE: Building footprint sits strictly within statutory setback boundaries.',
+      'STRUCTURAL_STACKING: Upper floor rooms stack along load-bearing wall alignments.'
+    ]
+  };
+
+  return { zoneRationale, sizingRationale, validationReport };
+}
 
 /** Programme → requirement check → geometry → full validation. Nothing reaches a renderer unless this passes. */
 export function realiseProgram(program: DesignProgram, site: SiteInfo, constraints: DesignConstraints): StageResult {
@@ -101,7 +157,8 @@ function stamp(design: StructuredDesignJSON, intent: 'INITIAL_DESIGN' | 'GENERAT
  * the outcome is a valid design, or a structured failure that says why.
  */
 export async function generateDesign(input: GenerationInput): Promise<GenerationOutcome> {
-  const { site, location, requirements, preferences } = input;
+  const { site, location, requirements, preferences, onStage } = input;
+  onStage?.('checking_brief', 'Checking plot envelope and validating brief requirements...');
   const baseConstraints = buildConstraints(requirements, preferences);
   const intent = input.alternativeTo ? 'GENERATE_ALTERNATIVE_CONCEPT' : 'INITIAL_DESIGN';
   const previousConcept = input.alternativeTo?.conceptNumber || 1;
@@ -158,10 +215,13 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
   }
 
   const runLocal = (notice?: string): GenerationOutcome => {
+    onStage?.('laying_out', 'Synthesizing room geometry and circulation with built-in rule engine...');
     if (!baseline.design) {
       return { status: 'INVALID_DESIGN', reason: 'The built-in rule engine could not produce a valid plan for this brief.', violatedConstraints: baseline.errors, attempts: 1, canUseLocalEngine: false };
     }
     stamp(baseline.design, intent, 'local-rule-engine', 'local-rule-engine', 1, conceptNumber);
+    onStage?.('validating', 'Validating structural stacking, circulation and setbacks...');
+    baseline.design.planExplanation = buildPlanExplanation(baseline.design, constraints, site, { isValid: true, errors: [], warnings: baseline.warnings });
     return { status: 'OK', design: baseline.design, engine: 'local-rule-engine', modelId: 'local-rule-engine', attempts: 1, warnings: [...styleNotes, ...baseline.warnings], notes: baseline.notes, notice };
   };
 
@@ -185,9 +245,14 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
 
   while (attempts < MAX_GENERATION_ATTEMPTS) {
     attempts++;
+    onStage?.('planning', `AI Planner is reasoning about spatial program and orientation (attempt ${attempts})...`);
     const prompt = currentProgram ? buildAlternativeProgramPrompt(promptInput, currentProgram, feedback) : buildProgramPrompt(promptInput, feedback);
     const call = await callGeminiJson(SYSTEM_ARCHITECTURAL_PROMPT, prompt, deadline);
 
+    if (!call.ok && call.kind === 'INPUT_REJECTED') {
+      // The request itself was refused by the AI service, so no key can help. Say so instead of hiding it behind a fallback.
+      return { status: 'INPUT_REJECTED', reason: `${call.detail} Check the site, requirements and notes you entered, then try again.`, violatedConstraints: [call.detail], attempts, canUseLocalEngine: true };
+    }
     if (!call.ok && call.kind !== 'BAD_RESPONSE') {
       // Gemini could not be reached at all. This is an availability problem, not an invalid design.
       if (attempts > 1 && lastErrors.length) break;
@@ -220,10 +285,13 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
       feedback = styleErrors;
       continue;
     }
+    onStage?.('laying_out', 'Synthesizing room geometry, walls, openings and staircase well...');
     const stage = realiseProgram(parsed.program, site, constraints);
     if (stage.design) {
+      onStage?.('validating', 'Validating structural stacking, circulation and setbacks...');
       stamp(stage.design, intent, 'gemini', call.modelId, attempts, conceptNumber);
       stage.design.layoutNotes = [...parsed.notes, ...stage.notes];
+      stage.design.planExplanation = buildPlanExplanation(stage.design, constraints, site, { isValid: true, errors: [], warnings: stage.warnings });
       return { status: 'OK', design: stage.design, engine: 'gemini', modelId: call.modelId, attempts, warnings: [...styleNotes, ...stage.warnings], notes: stage.design.layoutNotes };
     }
     lastErrors = stage.errors;

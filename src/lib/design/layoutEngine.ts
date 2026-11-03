@@ -19,6 +19,7 @@ import { DEFAULT_APPEARANCE_BY_STYLE } from '@/lib/geometry/materials';
 import { OPEN_TYPES, PlanCell, Rect, deriveWallSegments, round2, sharedEdge, wallsToCanonical } from '@/lib/geometry/planGeometry';
 import { ROOM_TYPE_SPECS, floorName, isBedroomType } from './roomTypes';
 import { solveOpenings } from './openings';
+import { styleBlueprint } from './styleBlueprints';
 
 export interface LayoutSuccess {
   ok: true;
@@ -62,19 +63,22 @@ interface PlacedRoom {
 
 export function defaultSetbacks(plotWidth: number, plotDepth: number): SiteSetbacks {
   return {
-    front: plotDepth >= 60 ? 10 : plotDepth >= 40 ? 8 : 5,
-    rear: plotDepth >= 60 ? 6 : plotDepth >= 40 ? 5 : 3,
-    left: plotWidth >= 50 ? 5 : plotWidth >= 30 ? 4 : 3,
-    right: plotWidth >= 50 ? 5 : plotWidth >= 30 ? 4 : 3
+    // Small urban plots (about 1,500 sq ft and under) use lean setbacks, as local rules allow, so a family home still fits.
+    front: plotDepth >= 60 ? 10 : plotWidth * plotDepth <= 1500 ? 5 : plotDepth >= 40 ? 8 : 5,
+    rear: plotDepth >= 60 ? 6 : plotWidth * plotDepth <= 1500 ? 3 : plotDepth >= 40 ? 5 : 3,
+    left: plotWidth >= 50 ? 5 : plotWidth * plotDepth <= 1500 ? 3 : plotWidth >= 30 ? 4 : 3,
+    right: plotWidth >= 50 ? 5 : plotWidth * plotDepth <= 1500 ? 3 : plotWidth >= 30 ? 4 : 3
   };
 }
 
 export function buildableEnvelope(site: SiteInfo) {
   const setbacks = site.setbacks || defaultSetbacks(site.plotWidth, site.plotDepth);
+  const allowPorchInSetback = site.allowPorchInSetback ?? (site.plotWidth * site.plotDepth <= 2000);
   return {
     setbacks,
     width: site.plotWidth - setbacks.left - setbacks.right,
-    depth: site.plotDepth - setbacks.front - setbacks.rear
+    depth: site.plotDepth - setbacks.front - setbacks.rear,
+    allowPorchInSetback
   };
 }
 
@@ -86,34 +90,51 @@ const needsOwnWindow = (room: WorkRoom) => ['kitchen', 'study', 'bedroom', 'mast
 const fmtFt = (value: number) => `${Math.round(value * 2) / 2}'`;
 const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
 
-function unitMinWidth(unit: Unit): number {
-  if (unit.rooms[0].type === 'stair') return STAIR_WIDTH;
+function unitMinWidth(unit: Unit, porchSetbackUsage = 0): number {
+  const major = unit.rooms[0];
+  if (major.type === 'stair') return STAIR_WIDTH;
+  if (unit.kind === 'major' && major.type === 'parking') return 9;
   if (unit.kind === 'stack') return Math.max(...unit.rooms.map((room) => Math.max(spec(room).minSide, 4)));
   return spec(unit.rooms[0]).minSide;
 }
 
-function unitMinDepth(unit: Unit): number {
-  if (unit.rooms[0].type === 'stair') return STAIR_MIN_DEPTH;
+function unitMinDepth(unit: Unit, porchSetbackUsage = 0, isSmallPlot = false): number {
+  const major = unit.rooms[0];
+  if (major.type === 'stair') return isSmallPlot ? 10.5 : STAIR_MIN_DEPTH;
+  if (unit.kind === 'major' && major.type === 'parking') {
+    return Math.max(7, 15 - porchSetbackUsage);
+  }
+  if (unit.kind === 'major' && major.type === 'living' && porchSetbackUsage > 0) {
+    const inline = unit.rooms.slice(1);
+    const inlineDepth = sum(inline.map((r) => r.type === 'entrance' ? Math.max(0, spec(r).minSide - porchSetbackUsage) : spec(r).minSide));
+    return spec(major).minSide + inlineDepth;
+  }
+  if (isSmallPlot) {
+    return sum(unit.rooms.map((room) => room.type === 'balcony' ? 3 : spec(room).minSide));
+  }
   return sum(unit.rooms.map((room) => spec(room).minSide));
 }
 
-function unitWidth(unit: Unit, depth: number): number {
+function unitWidth(unit: Unit, depth: number, porchSetbackUsage = 0): number {
   const major = unit.rooms[0];
   if (major.type === 'stair') return STAIR_WIDTH;
-  const area = sum(unit.rooms.map((room) => room.area));
+  const isLivingWithFrontEntrance = unit.kind === 'major' && major.type === 'living' && porchSetbackUsage > 0;
+  const area = isLivingWithFrontEntrance
+    ? major.area + sum(unit.rooms.slice(1).map((r) => r.type === 'entrance' ? 0 : r.area))
+    : sum(unit.rooms.map((room) => room.area));
   if (unit.kind === 'major' && major.type === 'parking') {
-    // A car needs roughly 9 ft x 15 ft in one orientation or the other.
-    return depth >= 15 ? Math.max(area / depth, 9) : Math.max(area / depth, 15);
+    const effDepth = depth + porchSetbackUsage;
+    return effDepth >= 14 ? Math.max(area / effDepth, 9) : Math.max(area / effDepth, 15);
   }
-  return Math.max(area / depth, unitMinWidth(unit));
+  return Math.max(area / depth, unitMinWidth(unit, porchSetbackUsage));
 }
 
 /** Depth at which a unit's main room is comfortably proportioned (slightly deeper than wide). */
-function unitPreferredDepth(unit: Unit): number {
+function unitPreferredDepth(unit: Unit, maxDepth = 19, porchSetbackUsage = 0): number {
   const [major, ...inline] = unit.rooms;
-  if (major.type === 'parking') return 17;
+  if (major.type === 'parking') return Math.max(8, 16 - porchSetbackUsage);
   if (major.type === 'stair') return 14;
-  return Math.min(19, Math.sqrt(major.area * 1.25) + sum(inline.map((room) => spec(room).minSide)));
+  return Math.min(maxDepth, Math.sqrt(major.area * 1.25) + sum(inline.map((room) => spec(room).minSide)));
 }
 
 /** Groups a zone's rooms into side-by-side units: a major room (with anything sharing its column) or a stack of small rooms. */
@@ -218,10 +239,10 @@ function buildUnits(rooms: WorkRoom[]): Unit[] {
 }
 
 /** Smallest zone depth at which the units fit side by side in the available width. */
-function solveBandDepth(units: Unit[], width: number, strip: number, floorDepth: number): number {
+function solveBandDepth(units: Unit[], width: number, strip: number, floorDepth: number, porchSetbackUsage = 0, isSmallPlot = false): number {
   if (!units.length) return floorDepth;
-  const lower = Math.max(floorDepth, strip + Math.max(...units.map(unitMinDepth)));
-  const widthAt = (depth: number) => sum(units.map((unit) => unitWidth(unit, depth - strip)));
+  const lower = Math.max(floorDepth, strip + Math.max(...units.map((u) => unitMinDepth(u, porchSetbackUsage, isSmallPlot))));
+  const widthAt = (depth: number) => sum(units.map((unit) => unitWidth(unit, depth - strip, porchSetbackUsage)));
   if (widthAt(lower) <= width + 1e-6) return lower;
   if (widthAt(MAX_BAND_DEPTH) > width + 1e-6) return Infinity;
   let lo = lower;
@@ -331,6 +352,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
 
   const floors = constraints.floors;
   const multiStorey = floors > 1;
+  const isSmallPlot = plotWidth * plotDepth <= 1500 || lean;
   const lifeStage = constraints.modes.includes('life_stage');
   const budgetFirst = constraints.modes.includes('budget_first');
   const passageDepth = lifeStage ? 4.5 : 3.5;
@@ -356,8 +378,9 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     id, name, type, floor, areaSqFt: Math.round(area), area, band, side, required: false, relationships: [], features, derived: true, order: derivedOrder++
   });
   if (multiStorey) {
+    const isSmall = plotWidth * plotDepth <= 1500;
     // The stair is planned on the ground floor and reserved at the same position on every floor above.
-    targets.push(derivedRoom('room-stair-0', 'Staircase', 'stair', 0, circulationBand, program.stairSide, STAIR_WIDTH * 12, ['Dog-legged stair']));
+    targets.push(derivedRoom('room-stair-0', 'Staircase', 'stair', 0, circulationBand, program.stairSide, STAIR_WIDTH * (isSmall ? 10.5 : 12), ['Dog-legged stair']));
     for (let floor = 0; floor < floors; floor++) {
       const middle = targets.filter((room) => room.floor === floor && room.band === circulationBand && isMajor(room));
       const needsLobby = floor === 0 ? !middle.some((room) => room.type !== 'courtyard' && room.type !== 'stair') : !middle.some(isHub);
@@ -376,6 +399,9 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     return stair + sum(courtyards.filter((c) => c.band === band).map((c) => Math.max(c.area / 12, spec(c).minSide)));
   };
 
+  const allowPorchInSetback = site.allowPorchInSetback ?? (plotWidth * plotDepth <= 2000);
+  const porchSetbackUsage = allowPorchInSetback ? Math.max(0, Math.min(setbacks.front - 0.5, 6)) : 0;
+
   // ---- Rebalance: a zone cannot hold more rooms side by side than the envelope is wide ----
   const MOVE_FIRST: RoomType[] = ['study', 'guest_room', 'bedroom', 'lounge', 'master_bedroom', 'dining', 'kitchen'];
   for (let pass = 0; pass < 12; pass++) {
@@ -383,13 +409,14 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     for (let floor = 0; floor < floors && !moved; floor++) {
       for (const band of BANDS) {
         const here = roomsIn(floor, band);
-        const minWidth = sum(buildUnits(here).map(unitMinWidth)) + reservedWidth(floor, band);
+        const porchUsage = band === 'front' ? porchSetbackUsage : 0;
+        const minWidth = sum(buildUnits(here).map((u) => unitMinWidth(u, porchUsage))) + reservedWidth(floor, band);
         // The circulation zone has outside walls only at its ends, and the end beside the living room is
         // needed for dining, so only the kitchen is planned there; other rooms needing a window move out.
         const windowSeekers = band === 'middle' && !here.some((room) => room.type === 'courtyard') ? here.filter((room) => isMajor(room) && needsOwnWindow(room)) : [];
         if (windowSeekers.length > 1) {
           const extra = windowSeekers.filter((room) => room.type !== 'kitchen').sort((a, b) => MOVE_FIRST.indexOf(a.type) - MOVE_FIRST.indexOf(b.type) || b.order - a.order)[0];
-          const loadOf = (other: PlanBand) => sum(buildUnits(roomsIn(floor, other)).map(unitMinWidth)) + reservedWidth(floor, other);
+          const loadOf = (other: PlanBand) => sum(buildUnits(roomsIn(floor, other)).map((u) => unitMinWidth(u, other === 'front' ? porchSetbackUsage : 0))) + reservedWidth(floor, other);
           const target = (['rear', 'front'] as PlanBand[]).filter((other) => other !== band).sort((a, b) => loadOf(a) - loadOf(b))[0];
           if (extra && target && loadOf(target) + spec(extra).minSide + 4.5 <= envWidth) {
             targets.filter((room) => room.id === extra.id || room.attachedTo === extra.id).forEach((room) => { room.band = target; });
@@ -406,7 +433,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
           || here.filter((room) => isMajor(room) && MOVE_FIRST.includes(room.type) && !room.derived)
             .sort((a, b) => MOVE_FIRST.indexOf(a.type) - MOVE_FIRST.indexOf(b.type) || b.order - a.order)[0];
         if (!movable) continue;
-        const load = (other: PlanBand) => sum(buildUnits(roomsIn(floor, other)).map(unitMinWidth)) + reservedWidth(floor, other);
+        const load = (other: PlanBand) => sum(buildUnits(roomsIn(floor, other)).map((u) => unitMinWidth(u, other === 'front' ? porchSetbackUsage : 0))) + reservedWidth(floor, other);
         const destination = BANDS.filter((other) => Math.abs(BANDS.indexOf(other) - BANDS.indexOf(band)) === 1).sort((a, b) => load(a) - load(b))[0];
         if (load(destination) + spec(movable).minSide > envWidth) continue;
         targets.filter((room) => room.id === movable.id || room.attachedTo === movable.id).forEach((room) => { room.band = destination; });
@@ -419,13 +446,16 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   }
 
   // ---- Zone depths ----
+  let currentGrowth = 1;
+  /** On a generous plot a bedroom hall costs nothing, so no bedroom is reached through the dining or living room. */
+  const generous = () => currentGrowth > 1.25;
   const stripFor = (floor: number, band: PlanBand) => {
     const majors = roomsIn(floor, band).filter(isMajor).length;
     // Last resort: a hall across the front of the circulation zone, on every floor so the stair lines up.
     if (band === 'middle') return passagePolicy >= 3 && targets.some((room) => room.band === 'middle' && isMajor(room)) ? passageDepth : 0;
     if (band !== 'rear') return 0;
-    if (majors >= 3 || (majors >= 1 && passagePolicy >= 2)) return passageDepth;
-    if (majors === 2 && passagePolicy >= 0 && (!budgetFirst || passagePolicy >= 1)) return passageDepth;
+    if (majors >= 3 || (majors >= 1 && (passagePolicy >= 2 || generous()))) return passageDepth;
+    if (majors === 2 && passagePolicy >= 0 && (!budgetFirst || passagePolicy >= 1 || generous())) return passageDepth;
     return 0;
   };
   const applyCompression = (s: number) => {
@@ -436,33 +466,120 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     });
   };
   /** Minimum depth per zone at which every floor's rooms fit across the envelope width. */
-  const fitDepths = (): Record<PlanBand, number> => {
+  const fitDepths = (widthCap = envWidth): Record<PlanBand, number> => {
     const depths = { front: 0, middle: 0, rear: 0 } as Record<PlanBand, number>;
     for (const band of BANDS) {
       for (let floor = 0; floor < floors; floor++) {
-        const available = envWidth - reservedWidth(floor, band);
-        const floorMin = multiStorey && band === circulationBand ? STAIR_MIN_DEPTH : 0;
+        const available = widthCap - reservedWidth(floor, band);
+        const isSmallPlot = plotWidth * plotDepth <= 1500;
+        const floorMin = multiStorey && band === circulationBand ? (isSmallPlot ? 10.5 : STAIR_MIN_DEPTH) : 0;
         if (available <= 0) return { front: Infinity, middle: Infinity, rear: Infinity };
-        depths[band] = Math.max(depths[band], solveBandDepth(buildUnits(roomsIn(floor, band)), available, stripFor(floor, band), floorMin));
+        const porchUsage = band === 'front' ? porchSetbackUsage : 0;
+        depths[band] = Math.max(depths[band], solveBandDepth(buildUnits(roomsIn(floor, band)), available, stripFor(floor, band), floorMin, porchUsage, isSmallPlot));
       }
     }
     return depths;
   };
   const totalOf = (d: Record<PlanBand, number>) => d.front + d.middle + d.rear;
 
+  // ---- Grow with the plot: a generous site gets generously sized rooms, not the same small house ----
+  // Rooms are enlarged as far as the house still leaves open land around it (garden, drive, setbacks).
+  // A plot that is already tight for the brief never grows, so small plots behave exactly as before.
+  const baseAreas = new Map(targets.map((room) => [room.id, room.areaSqFt]));
+  const growthExponent = (room: WorkRoom): number => {
+    if (room.derived || room.type === 'stair' || room.type === 'parking' || room.type === 'passage') return 0;
+    if (['living', 'dining', 'kitchen', 'master_bedroom', 'bedroom', 'guest_room', 'study', 'lounge', 'courtyard', 'balcony', 'terrace'].includes(room.type)) return 1;
+    return 0.5; // baths, store, utility, puja, dressing, entrance grow more slowly
+  };
+  const ROOM_MAX_GROWTH_AREA: Partial<Record<RoomType, number>> = {
+    living: 450, dining: 260, kitchen: 220, master_bedroom: 350,
+    bedroom: 240, guest_room: 220, lounge: 280, study: 200,
+    entrance: 140, puja: 80, store: 80, utility: 100, bathroom: 70, dressing: 90
+  };
+  const setGrowth = (g: number) => {
+    currentGrowth = g;
+    targets.forEach((room) => {
+      const base = baseAreas.get(room.id) || room.areaSqFt;
+      const max = ROOM_MAX_GROWTH_AREA[room.type] ?? 450;
+      room.areaSqFt = Math.round(Math.min(max, base * Math.pow(g, growthExponent(room))));
+    });
+  };
+
+  const plotArea = plotWidth * plotDepth;
+  // Believable ground coverage: 20% to 45% for large plots; up to 60-65% for small urban plots
+  const targetMaxCoverage = plotArea <= 1500 ? 0.65 : plotArea <= 2500 ? 0.55 : plotArea <= 5000 ? 0.44 : plotArea <= 8000 ? 0.38 : plotArea <= 15000 ? 0.32 : 0.28;
+  const maxAllowedGroundFootprint = plotArea * targetMaxCoverage;
+
+  const GROWTH_CAP: Record<DesignConstraints['budgetRange'], number> = { Economy: 2, Moderate: 2.6, Premium: 3, Luxury: 3.4 };
+  const maxDepthShare = plotArea >= 6000 ? 0.65 : 0.8;
+  const maxWidthShare = plotArea >= 6000 ? 0.70 : 0.85;
+  const growthFits = (g: number) => {
+    setGrowth(g);
+    applyCompression(1);
+    const d = fitDepths(envWidth * maxWidthShare);
+    const totDepth = totalOf(d);
+    if (totDepth > envDepth * maxDepthShare) return false;
+    if (plotArea >= 4000) {
+      const groundSum = sum(targets.filter((r) => r.floor === 0 && !OPEN_TYPES.includes(r.type)).map((r) => r.area));
+      if (groundSum > maxAllowedGroundFootprint) return false;
+    }
+    return true;
+  };
+  let growth = 1;
+  const growthCap = 1 + ((GROWTH_CAP[constraints.budgetRange] ?? 2.6) - 1) * styleBlueprint(constraints.style).growthBias;
+  if (!lean && growthFits(1)) {
+    if (growthFits(growthCap)) growth = growthCap;
+    else {
+      let lo = 1;
+      let hi = growthCap;
+      for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) / 2;
+        if (growthFits(mid)) lo = mid;
+        else hi = mid;
+      }
+      growth = lo;
+    }
+    if (growth > 1.04) notes.push(`Room sizes were increased by about ${Math.round((growth - 1) * 100)}% to suit the ${fmtFt(site.plotWidth)} x ${fmtFt(site.plotDepth)} plot, leaving open land around the house.`);
+  }
+  setGrowth(growth);
+
+  const DEPTH_TOL = 0.1;
   applyCompression(1);
-  if (totalOf(fitDepths()) > envDepth + 1e-6) {
+  if (totalOf(fitDepths()) > envDepth + DEPTH_TOL) {
     // Targets do not fit: shrink rooms toward their minimum usable size, never below it.
     applyCompression(0);
     const needDepth = totalOf(fitDepths());
-    if (needDepth > envDepth + 1e-6) {
+    if (needDepth > envDepth + DEPTH_TOL) {
       const perFloor = Array.from({ length: floors }, (_, floor) => Math.round(sum(targets.filter((room) => room.floor === floor).map((room) => spec(room).minArea))));
+      const maxFloorArea = Math.max(...perFloor);
+      const envelopeAreaPerFloor = Math.round(envWidth * envDepth);
+      const depthShortfall = Number.isFinite(needDepth) ? Math.ceil(needDepth - envDepth) : 0;
+      const areaShortfall = Math.max(0, maxFloorArea - envelopeAreaPerFloor);
+
+      const suggestions: string[] = [];
+      if (constraints.parkingCars > 0) {
+        suggestions.push('Drop dedicated parking to free up ground footprint');
+      }
+      if (floors < 4) {
+        suggestions.push(`Add a floor (e.g. G+${floors} instead of G+${floors - 1}) to distribute rooms vertically across more levels`);
+      }
+      if (constraints.bedrooms > 1) {
+        suggestions.push(`Reduce bedroom count (e.g. from ${constraints.bedrooms} to ${constraints.bedrooms - 1} bedrooms)`);
+      }
+      const suggestionText = suggestions.length ? ` Suggestions: ${suggestions.map((s, i) => `${i + 1}) ${s}`).join('; ')}.` : '';
+      const shortfallText = depthShortfall > 0
+        ? `needs ${Math.ceil(needDepth)} ft of depth (${depthShortfall} ft shortfall from ${fmtFt(envDepth)} buildable depth)`
+        : `needs more width than the ${fmtFt(envWidth)} buildable width`;
+
       return {
         ok: false,
-        reason: `The requested rooms cannot fit on this plot with a zoned layout. Even at minimum room sizes the layout needs ${Number.isFinite(needDepth) ? `${Math.ceil(needDepth)} ft of depth` : 'more width than is available'}, but the buildable envelope is ${fmtFt(envWidth)} wide x ${fmtFt(envDepth)} deep (${Math.round(envWidth * envDepth)} sq ft per floor; the fullest floor needs at least ${Math.max(...perFloor)} sq ft of rooms plus circulation).`,
+        reason: `The requested rooms cannot fit on this plot. Even at minimum room sizes the layout ${shortfallText}, and the fullest floor needs ~${maxFloorArea} sq ft of rooms against ${envelopeAreaPerFloor} sq ft available.${suggestionText}`,
         violatedConstraints: [
           `Buildable envelope ${fmtFt(envWidth)} x ${fmtFt(envDepth)} after setbacks`,
-          `${constraints.bedrooms} bedroom(s), ${constraints.bathrooms} bathroom(s) on ${floors} floor(s)`
+          `${constraints.bedrooms} bedroom(s), ${constraints.bathrooms} bathroom(s) on ${floors} floor(s)`,
+          ...(depthShortfall > 0 ? [`Depth shortfall: ${depthShortfall} ft`] : []),
+          ...(areaShortfall > 0 ? [`Floor area shortfall: ${areaShortfall} sq ft`] : []),
+          ...suggestions.map(s => `Suggestion: ${s}`)
         ]
       };
     }
@@ -471,7 +588,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     for (let i = 0; i < 30; i++) {
       const mid = (lo + hi) / 2;
       applyCompression(mid);
-      if (totalOf(fitDepths()) <= envDepth) lo = mid;
+      if (totalOf(fitDepths()) <= envDepth + DEPTH_TOL) lo = mid;
       else hi = mid;
     }
     applyCompression(lo);
@@ -482,13 +599,18 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
 
   // Deepen zones toward comfortable room proportions while the plot depth allows it.
   const depths = fitDepths();
-  const slack = envDepth - totalOf(depths);
+  if (totalOf(depths) > envDepth) {
+    const tot = totalOf(depths);
+    for (const band of BANDS) depths[band] = (depths[band] * envDepth) / tot;
+  }
+  const slack = Math.max(0, envDepth - totalOf(depths));
   const wish = { front: 0, middle: 0, rear: 0 } as Record<PlanBand, number>;
   for (const band of BANDS) {
     const majorUnits = Array.from({ length: floors }, (_, floor) => buildUnits(roomsIn(floor, band)).filter((unit) => unit.kind === 'major')).flat();
     if (!majorUnits.length) continue;
+    const porchUsage = band === 'front' ? porchSetbackUsage : 0;
     const weights = majorUnits.map((unit) => sum(unit.rooms.map((room) => room.area)));
-    const preferred = sum(majorUnits.map((unit, i) => unitPreferredDepth(unit) * weights[i])) / sum(weights) + Math.max(...Array.from({ length: floors }, (_, floor) => stripFor(floor, band)));
+    const preferred = sum(majorUnits.map((unit, i) => unitPreferredDepth(unit, 19 + Math.min(7, (growth - 1) * 3.5), porchUsage) * weights[i])) / sum(weights) + Math.max(...Array.from({ length: floors }, (_, floor) => stripFor(floor, band)));
     wish[band] = Math.max(0, preferred - depths[band]);
   }
   const lambda = totalOf(wish) > 0 ? Math.min(1, Math.max(0, slack) / totalOf(wish)) : 0;
@@ -498,8 +620,10 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   const naturalWidth = (floor: number, band: PlanBand) => {
     const units = buildUnits(roomsIn(floor, band));
     if (!units.length) return 0;
-    return sum(units.map((unit) => unitWidth(unit, depths[band] - stripFor(floor, band)))) + reservedWidth(floor, band);
+    const porchUsage = band === 'front' ? porchSetbackUsage : 0;
+    return sum(units.map((unit) => unitWidth(unit, depths[band] - stripFor(floor, band), porchUsage))) + reservedWidth(floor, band);
   };
+
   const footprintWidth = Math.min(envWidth, Math.max(18, Math.ceil(Math.max(...BANDS.flatMap((band) => Array.from({ length: floors }, (_, floor) => naturalWidth(floor, band)))) * 2) / 2));
   const bandRange = {} as Record<PlanBand, [number, number]>;
   for (const band of BANDS) {
@@ -530,11 +654,16 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   const placeUnit = (unit: Unit, floor: number, band: PlanBand, x: number, y: number, width: number, depth: number, neighbours: (WorkRoom | undefined)[] = []) => {
     if (unit.kind === 'major') {
       const [major, ...inline] = unit.rooms;
+      const isFrontParking = major.type === 'parking' && band === 'front';
+      const actualPorchUsage = isFrontParking ? porchSetbackUsage : 0;
+      const frontEntrance = major.type === 'living' && band === 'front' && inline.find((r) => r.type === 'entrance');
+      const entranceSetbackUsage = frontEntrance ? Math.min(porchSetbackUsage, spec(frontEntrance).minSide) : 0;
       let remaining = depth;
-      let cursorTop = y;
+      let cursorTop = y - (isFrontParking ? actualPorchUsage : entranceSetbackUsage);
       let cursorBottom = y + depth;
       for (const room of inline) {
-        const roomDepth = Math.min(Math.max(room.area / width, spec(room).minSide), (depth * 0.4) / inline.length);
+        const inlineMin = isSmallPlot && room.type === 'balcony' ? 3.0 : spec(room).minSide;
+        const roomDepth = room.type === 'entrance' ? inlineMin : Math.min(Math.max(room.area / width, inlineMin), (depth * 0.4) / inline.length);
         // Entrances and balconies face the road; service rooms and rear sit-outs face the back.
         const atFront = band !== 'rear' && room.type !== 'utility' && room.type !== 'store';
         if (atFront) {
@@ -544,9 +673,9 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
           cursorBottom -= roomDepth;
           placed.push({ room, rect: { x, y: cursorBottom, w: width, d: roomDepth } });
         }
-        remaining -= roomDepth;
+        remaining -= (room.type === 'entrance' ? Math.max(0, roomDepth - entranceSetbackUsage) : roomDepth);
       }
-      placed.push({ room: major, rect: { x, y: cursorTop, w: width, d: remaining } });
+      placed.push({ room: major, rect: { x, y: cursorTop, w: width, d: remaining + actualPorchUsage } });
       return;
     }
 
@@ -607,13 +736,12 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
       if (rangeEnd - cursor > 0.5) segments.push([cursor, rangeEnd]);
 
       if (!units.length) {
-        // Nothing planned here on this floor: upstairs it is roof terrace over the room below.
-        if (floor > 0) segments.forEach(([start, end]) => addDerived('terrace', 'Open Terrace', floor, band, { x: start, y: y0, w: end - start, d: depth }));
+        // Nothing planned here on this floor: the upper footprint steps in over the ground floor roof.
         continue;
       }
       if (!segments.length) continue;
 
-      const natural = units.map((unit) => unitWidth(unit, effDepth));
+      const natural = units.map((unit) => unitWidth(unit, effDepth, band === 'front' ? porchSetbackUsage : 0));
       // The landing room must sit against the stair, so the segment touching the stair is filled first.
       const stairBlock = blocks.find((block) => block.kind === 'stair');
       const touchesStair = ([start, end]: [number, number]) => !!stairBlock && (Math.abs(start - (stairBlock.rect.x + stairBlock.rect.w)) < 0.1 || Math.abs(end - stairBlock.rect.x) < 0.1);
@@ -627,26 +755,53 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
         const indices = assignment[index];
         const segWidth = segEnd - segStart;
         if (!indices.length) {
-          if (floor > 0) addDerived('terrace', 'Open Terrace', floor, band, { x: segStart, y: y0, w: segWidth, d: depth });
+          // Empty segment with no units: do NOT add an empty terrace.
           return;
         }
         const widths = indices.map((i) => natural[i]);
         const used = sum(widths);
-        const majorUsed = sum(indices.map((i, j) => (units[i].kind === 'major' && units[i].rooms[0].type !== 'stair' ? widths[j] : 0)));
+        const isStretchable = (i: number) => {
+          const u = units[i];
+          return u.kind === 'major' && u.rooms[0].type !== 'stair' && u.rooms[0].type !== 'parking';
+        };
+        const majorUsed = sum(indices.map((i, j) => (isStretchable(i) ? widths[j] : 0)));
         const leftover = segWidth - used;
         // Ground floors are built out to carry the floor above; upstairs a real leftover becomes terrace.
         const fill = floor === 0 || leftover < 4 || (band === circulationBand && majorUsed > 0);
-        // Ground rooms may grow to carry the floor above, but not beyond 1.6x; the rest stays an open, covered sit-out.
-        const stretchLimit = floor === 0 && band !== circulationBand && majorUsed > 0 && leftover > majorUsed * 0.6 ? majorUsed * 0.6 : leftover;
+        // Cap stretch so that habitable major rooms never exceed 1.8:1 aspect ratio!
+        const MAX_HABITABLE_RATIO = 1.8;
+        const maxMajorWidth = effDepth * MAX_HABITABLE_RATIO;
+        const stretchLimit = floor === 0 && band !== circulationBand && majorUsed > 0 && leftover > majorUsed * 0.5 ? majorUsed * 0.5 : leftover;
         let final = widths;
-        if (used > segWidth) final = widths.map((w) => (w * segWidth) / used);
-        else if (fill && majorUsed > 0) final = widths.map((w, j) => (units[indices[j]].kind === 'major' && units[indices[j]].rooms[0].type !== 'stair' ? w + (stretchLimit * w) / majorUsed : w));
-        else if (fill) final = widths.map((w) => (w * segWidth) / used);
+        if (used > segWidth) {
+          final = widths.map((w) => (w * segWidth) / used);
+        } else if (fill && majorUsed > 0) {
+          final = widths.map((w, j) => {
+            if (isStretchable(indices[j])) {
+              const stretched = w + (stretchLimit * w) / majorUsed;
+              return Math.min(stretched, maxMajorWidth);
+            }
+            return w;
+          });
+        } else if (fill) {
+          final = widths.map((w) => (w * segWidth) / used);
+        }
+        if (sum(final) > segWidth) {
+          const s = sum(final);
+          final = final.map((w) => (w * segWidth) / s);
+        }
         const finalUsed = sum(final);
         const gap = segWidth - finalUsed;
         let x = alignRight && segments.length === 1 ? segStart + gap : segStart;
         if (gap >= 4) {
-          addDerived('terrace', floor > 0 ? 'Open Terrace' : 'Covered Sit-out', floor, band, { x: alignRight && segments.length === 1 ? segStart : segStart + finalUsed, y: y0, w: gap, d: depth });
+          if (floor === 0) {
+            addDerived('terrace', 'Covered Sit-out', floor, band, { x: alignRight && segments.length === 1 ? segStart : segStart + finalUsed, y: y0, w: Math.min(gap, 14), d: depth });
+          } else {
+            // Upstairs: purposeful balcony/terrace (width <= 14) that extends the full band depth to touch the house
+            const purposefulWidth = Math.min(gap, 14);
+            const terraceX = alignRight && segments.length === 1 ? segStart + (gap - purposefulWidth) : segStart + finalUsed;
+            addDerived('terrace', 'Balcony', floor, band, { x: terraceX, y: y0, w: purposefulWidth, d: depth });
+          }
         }
         occupiedStart = Math.min(occupiedStart, x);
         indices.forEach((unitIndex, j) => {
@@ -712,7 +867,13 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
   });
 
   // A room squeezed below a usable size means the programme does not fit: say so rather than draw it.
-  const squeezed = placed.filter((p) => !p.room.derived && p.room.type !== 'void' && (Math.min(p.rect.w, p.rect.d) < spec(p.room).minSide - 0.5 || p.rect.w * p.rect.d < spec(p.room).minArea * 0.85));
+  const squeezed = placed.filter((p) => {
+    if (p.room.derived || p.room.type === 'void') return false;
+    if (p.room.type === 'parking') {
+      return Math.max(p.rect.w, p.rect.d) < 14.5 || Math.min(p.rect.w, p.rect.d) < 8.5;
+    }
+    return Math.min(p.rect.w, p.rect.d) < spec(p.room).minSide - 0.5 || p.rect.w * p.rect.d < spec(p.room).minArea * 0.85;
+  });
   if (squeezed.length) {
     return {
       ok: false,
@@ -871,7 +1032,8 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
       totalArea: Math.round(plotWidth * plotDepth),
       orientation: site.orientation,
       roadSide: (['N', 'S', 'E', 'W'].includes(site.orientation) ? site.orientation : site.orientation.charAt(0)) as 'N' | 'S' | 'E' | 'W',
-      setbacks
+      setbacks,
+      allowPorchInSetback
     },
     buildableAreaSqFt: Math.round(envWidth * envDepth),
     totalBuiltUpAreaSqFt: floorLevels.reduce((sum, level) => sum + level.builtUpAreaSqFt, 0),

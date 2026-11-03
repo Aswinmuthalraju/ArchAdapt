@@ -273,7 +273,9 @@ function solveWithFoot(
             if (to.type === 'bathroom' && (from.type === 'living' || from.type === 'dining' || from.type === 'kitchen')) score += 7;
             if (from.type === 'kitchen' && to.type !== 'utility' && to.type !== 'store') score += 6; // avoid walking through the kitchen
             if (to.type === 'kitchen' && from.type === 'living') score += 2; // the kitchen opens off the dining room where it can
-            if ((isBedroomType(to.type) || to.type === 'guest_room') && from.type === 'living') score += 1.5;
+            if ((isBedroomType(to.type) || to.type === 'guest_room') && from.type === 'passage') score -= 3; // strong preference for bedrooms off passage
+            if ((isBedroomType(to.type) || to.type === 'guest_room') && from.type === 'lounge') score -= 1.5;
+            if ((isBedroomType(to.type) || to.type === 'guest_room') && (from.type === 'living' || from.type === 'dining')) score += 8; // avoid opening directly into living/dining when passage/lobby exists
             if (from.type === 'entrance' && to.type !== 'living' && to.type !== 'lounge') score += 3;
             if (OUTDOOR.includes(from.type)) score += 4;
             if (hubPriority(to.type)) score -= 0.5; // open up circulation first
