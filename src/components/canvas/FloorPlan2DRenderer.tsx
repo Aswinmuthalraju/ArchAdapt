@@ -4,11 +4,13 @@ import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import { StructuredDesignJSON, FloorPlanRoom } from '@/types/architectural';
 import { ZoomIn, ZoomOut, Maximize2, Ruler, X, Armchair } from 'lucide-react';
 import { floorName, inferRoomType } from '@/lib/design/roomTypes';
-import PlanSvg, { PLAN_CANVAS } from './PlanSvg';
+import PlanSvg, { PLAN_CANVAS, plotFrame } from './PlanSvg';
 
 interface FloorPlan2DRendererProps {
   design: StructuredDesignJSON;
   selectedRoomId?: string;
+  /** An uploaded site sketch, drawn under the house and stretched to the plot boundary. */
+  sitePlanUrl?: string | null;
   onRoomSelect?: (room: FloorPlanRoom | null) => void;
 }
 
@@ -16,7 +18,10 @@ const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 4;
 
 /** The 2D view of the canonical design: toolbar, floor tabs, pan and zoom around the shared plan drawing. */
-export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSelect }: FloorPlan2DRendererProps) {
+export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSelect, sitePlanUrl }: FloorPlan2DRendererProps) {
+  const [showSketch, setShowSketch] = useState(true);
+  const [sketchOpacity, setSketchOpacity] = useState(0.4);
+  const frame = useMemo(() => plotFrame(design), [design]);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -158,6 +163,12 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
           )}
         </div>
         <div className="flex items-center gap-2">
+          {sitePlanUrl && (
+            <div className="flex h-9 items-center gap-2 border border-stone-300 bg-white/90 px-3 text-sm text-stone-700">
+              <button type="button" onClick={() => setShowSketch((v) => !v)} aria-pressed={showSketch} className={showSketch ? 'font-medium text-magenta-700' : ''}>Site sketch</button>
+              {showSketch && <input type="range" min={0.1} max={1} step={0.05} value={sketchOpacity} onChange={(e) => setSketchOpacity(Number(e.target.value))} aria-label="Site sketch opacity" className="w-20" />}
+            </div>
+          )}
           <button
             onClick={() => setShowAnnotations((v) => !v)}
             aria-pressed={showAnnotations}
@@ -223,8 +234,12 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
 
         <div
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transition: dragging ? 'none' : 'transform 0.12s ease-out' }}
-          className="aspect-square h-full max-h-[860px] max-w-full will-change-transform"
+          className="relative aspect-square h-full max-h-[860px] max-w-full will-change-transform"
         >
+          {sitePlanUrl && showSketch && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={sitePlanUrl} alt="Uploaded site sketch" draggable={false} className="pointer-events-none absolute z-[1] object-fill mix-blend-multiply" style={{ left: `${frame.left * 100}%`, top: `${frame.top * 100}%`, width: `${frame.width * 100}%`, height: `${frame.height * 100}%`, opacity: sketchOpacity }} />
+          )}
           <PlanSvg
             design={design}
             floor={floor}

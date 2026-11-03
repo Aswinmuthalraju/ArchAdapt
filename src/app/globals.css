@@ -11,7 +11,7 @@
   --blossom-soft: #F1D9E4;
   --gold: #C9A227;
   --gold-light: #E8CF7A;
-  --gold-deep: #8C6A12;
+  --gold-deep: #7A5C0F;
   --gold-metal: linear-gradient(120deg, #8C6A12, #E8CF7A 45%, #C9A227 60%, #8C6A12);
   --paper: var(--ivory);
   --magenta: #9A5675;
@@ -269,7 +269,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 
 /* Inner marketing pages */
 .display--sm { font-size: clamp(3rem, 8vw, 8.5rem); }
-.label--muted { color: rgba(27, 27, 31, .6); }
+.label--muted { color: rgba(27, 27, 31, .72); }
 .page-hero { position: relative; padding: 28vh var(--gutter) 12vh; overflow: hidden; }
 .page-hero .label { margin-bottom: 30px; }
 .page-hero .body { max-width: 52ch; margin-top: 7vh; }
@@ -443,7 +443,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 .style-feature-facts .label--muted:not(:first-child) { margin-top: 30px; }
 .fact-list { display: grid; gap: 0; }
 .fact-list > div { display: flex; justify-content: space-between; gap: 20px; padding: 13px 0; border-bottom: 1px solid rgba(27, 27, 31, .12); font-size: 14px; }
-.fact-list dt { color: rgba(27, 27, 31, .6); }
+.fact-list dt { color: rgba(27, 27, 31, .72); }
 .fact-list dd { text-align: right; }
 
 .style-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6vw; padding: 6vh var(--gutter) 14vh; }
@@ -459,7 +459,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 
 .style-pager { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 4vh var(--gutter) 14vh; border-top: 1px solid rgba(27, 27, 31, .12); margin: 0 var(--gutter); padding-left: 0; padding-right: 0; }
 .style-pager-link { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; font-family: var(--font-serif); font-size: clamp(1.05rem, 2vw, 1.6rem); text-transform: uppercase; min-height: 48px; }
-.style-pager-link small { display: block; font-family: var(--font-sans); font-size: 10.5px; letter-spacing: .2em; color: rgba(27, 27, 31, .55); margin-bottom: 4px; }
+.style-pager-link small { display: block; font-family: var(--font-sans); font-size: 10.5px; letter-spacing: .2em; color: rgba(27, 27, 31, .72); margin-bottom: 4px; }
 .style-pager-link--next { text-align: right; }
 .style-pager-all { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink); border-bottom: 1px solid var(--gold); padding-bottom: 3px; }
 

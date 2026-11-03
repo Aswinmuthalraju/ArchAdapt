@@ -38,10 +38,10 @@ export default function Preloader() {
     const raf = requestAnimationFrame(() => lenisRef.current?.stop());
     const counter = { value: 0 };
     const tl = gsap.timeline({ paused: true });
-    tl.fromTo(el.querySelectorAll('.emblem *'), { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 1.8, ease: 'power2.inOut', stagger: 0.15 }, 0)
-      .to(counter, { value: 100, duration: 2.1, ease: 'power3.inOut', onUpdate: () => { if (count.current) count.current.textContent = String(Math.round(counter.value)).padStart(3, '0'); } }, 0)
-      .to(el.querySelector('.preloader-inner'), { yPercent: -30, opacity: 0, duration: 0.7, ease: 'power3.in' }, '+=0.15')
-      .to(el, { yPercent: -100, duration: 1.1, ease: 'expo.inOut', onStart: () => release() }, '-=0.3')
+    tl.fromTo(el.querySelectorAll('.emblem *'), { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.6, ease: 'power2.inOut', stagger: 0.05 }, 0)
+      .to(counter, { value: 100, duration: 0.7, ease: 'power3.inOut', onUpdate: () => { if (count.current) count.current.textContent = String(Math.round(counter.value)).padStart(3, '0'); } }, 0)
+      .to(el.querySelector('.preloader-inner'), { yPercent: -30, opacity: 0, duration: 0.3, ease: 'power3.in' }, '+=0.02')
+      .to(el, { yPercent: -100, duration: 0.65, ease: 'expo.inOut', onStart: () => release() }, '-=0.2')
       .add(finish);
 
     // Hold the curtain until fonts are in, so the hero never reflows behind it.

@@ -79,3 +79,17 @@ test('no bathroom in any plan is drawn larger than 190 sq ft', async () => {
     }
   }
 });
+
+test('studies and guest rooms are never drawn as narrow strips, and no upstairs balcony is left without a door', async () => {
+  for (const [w, d] of [[50, 80], [60, 100], [80, 120], [100, 150]] as const) {
+    for (const [bedrooms, floors] of [[2, 1], [3, 2], [5, 3]] as const) {
+      const outcome = await generateDesign({ site: { plotWidth: w, plotDepth: d, totalArea: w * d, orientation: 'N' }, location, requirements: brief(bedrooms, floors), preferences: { modes: [], primaryStyle: 'Modern Luxury' }, engine: 'local' });
+      if (outcome.status !== 'OK') continue;
+      for (const room of outcome.design.rooms) {
+        const [rw, rd] = (room.dimensions.match(/[\d.]+/g) || ['1', '1']).map(Number);
+        if (room.roomType === 'study' || room.roomType === 'guest_room') assert.ok(Math.max(rw, rd) / Math.min(rw, rd) < 2.7, `${w}x${d} ${bedrooms}BR ${room.name} ${room.dimensions}`);
+        if ((room.position.floorLevel || 0) > 0 && room.derived && (room.roomType === 'terrace' || room.roomType === 'balcony')) assert.ok((room.connections || []).length > 0, `${w}x${d} ${bedrooms}BR orphan ${room.name}`);
+      }
+    }
+  }
+});

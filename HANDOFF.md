@@ -8,7 +8,7 @@ This replaces the earlier hand-off. Every number below was re-measured on this b
 
 | Check | Command | Result |
 | :--- | :--- | :--- |
-| Unit and regression tests | `npm test` | 90 / 90 pass |
+| Unit and regression tests | `npm test` | 93 / 93 pass |
 | Types | `npx tsc --noEmit` | clean |
 | Lint | `npm run lint` | no warnings or errors |
 | Production build | `npm run build` | succeeds |
@@ -47,6 +47,17 @@ Tests: two new tests (open courtyard on a large plot, bathroom size cap).
 - Colour: the deep maroon plum (`#3B0A26`) is now a soft dusty plum (`#5D4052`); the hot pink blossom, magenta, petal canvas and the blossom branch artwork are muted roses. Tokens live in `tailwind.config.js` and `globals.css`.
 - Mobile: smooth-scroll (Lenis) now runs only on mouse devices, so phones scroll natively; the petal canvas draws 7 petals instead of 18 on phones; the blur on the header and endless decorative animations are switched off on touch screens. Page headings and the callout title were overflowing at 320 to 390 px and are fixed.
 - Checked at 320, 360, 390, 768, 1024, 1280 and 1920 px across ten pages: no horizontal overflow and no headline wider than the screen. Frame pacing under 4x CPU throttle in headless Chrome was a steady 60 fps on the four main marketing pages. That cannot show GPU cost on a real phone, so a test on a real phone is still worth doing.
+
+## Closing pass: the six open items
+
+1. **Site sketch on the 2D plan.** The uploaded image is shrunk and kept in the browser (`src/lib/siteplan/sitePlanStore.ts`), then drawn under the plan stretched to the plot boundary, with a "Site sketch" toggle and an opacity slider. It is stored per browser, not in Supabase. The first version of this did not work (the file input is gone by the last step); the strict end-to-end test caught it and it is fixed.
+2. **Large-plot warnings.** Across the 216 feasible sweep plans, "balcony cannot be reached" went from 9 to 0: a leftover upstairs gap-filler balcony that no door reaches is now dropped. Warnings that remain are deliberate: "Dining has no external wall" (borrows light, 117 plans), requested-relationship misses, and a bedroom opening onto the hall in Kerala and Tropical 2BR single-storey plans on 50x80 and 60x100 plots (no passage band there; the courtyard is the hub).
+3. **Lighthouse (mobile, simulated slow 4G, 4x CPU).** Styles list 98 performance, 100 accessibility. Style page 96 / 100. Onboarding 100 / 96. Login 92 / 100. Best practices and SEO are 100 on all. Home is **79 to 81 performance** (LCP about 4 s): the hero is hidden until the JavaScript runs, so it is limited by hydration cost. The intro was shortened from about 4.6 s to about 2 s. Fixed: contrast tokens, logo accessible name, heading order, small touch targets, unsized images. Not fixed: the home "Numbers" section is flagged for contrast only because its plum background is a crossfading layer that the audit cannot see; it reads correctly in a browser.
+4. **End-to-end suite.** Every `if visible` guard is now a wait that fails. New steps: site sketch upload and overlay, all 8 style pages on a 390 px phone with no sideways scroll, tap from list to style page to "Start", and the 404 page.
+5. **Failover with live keys.** Tested against real Gemini: two invalid keys then a valid one answers in about 2.4 s; three invalid keys fail in under half a second with a per-key reason. This found two real problems, both fixed: the default model names (`gemini-2.5-*`) are retired for these keys ("no longer available to new users"), so the AI path had been failing on every key and silently using the local engine; the defaults are now `gemini-3.8-flash`, `gemini-3.5-flash`, `gemini-3.1-flash-lite`. And one hung call could use the whole time budget (90 s per call), so calls now time out at 28 s and a model that is overloaded on two keys is skipped. Note the first key was out of quota (HTTP 429) at test time.
+6. **Narrow study and guest room (Modern Luxury, 50x80 and 60x100).** A study or guest room stretched along a deep band (6.5 ft x 29 ft) is cut back and the freed strip becomes a Family Lounge beside the circulation. Test added.
+
+Still open: a real-phone check (iOS Safari, Android Chrome); the home page score above; two-key quota (key 1 returns 429 until its quota resets).
 
 ## Corrections to the earlier hand-off
 

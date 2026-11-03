@@ -12,7 +12,7 @@ export function LogoMark({ className = 'h-9 w-9' }: { className?: string }) {
 }
 
 export function Wordmark({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
-  return <span className={`font-sans text-[1.25rem] font-medium leading-none tracking-[-0.055em] ${tone === 'dark' ? 'text-stone-50' : 'text-stone-900'}`}>ArchAdapt<span className="ml-1.5 text-[10px] font-normal tracking-normal opacity-70">AI</span></span>;
+  return <span className={`font-sans text-[1.25rem] font-medium leading-none tracking-[-0.055em] ${tone === 'dark' ? 'text-stone-50' : 'text-stone-900'}`}>ArchAdapt{' '}<span className="ml-0.5 text-[10px] font-normal tracking-normal opacity-70">AI</span></span>;
 }
 
 /** The gable mark inside a fine ring. Every stroke has pathLength 1 so it can be drawn on. */

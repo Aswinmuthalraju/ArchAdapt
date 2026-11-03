@@ -113,3 +113,25 @@ test('when everything is down the failure says which key and model failed', asyn
     assert.match(result.detail, /model-b key 3/);
   }
 });
+
+test('a model that is overloaded on two keys is skipped for the third, and the next model answers', async () => {
+  const urls: string[] = [];
+  globalThis.fetch = (async (url: unknown) => {
+    const u = String(url);
+    urls.push(u);
+    return u.includes('model-a') ? reply({ status: 503, body: { error: { message: 'high demand' } } }) : reply(good);
+  }) as typeof fetch;
+
+  const result = await callGeminiJson('s', 'u', deadline());
+  assert.equal(result.ok, true);
+  assert.equal(urls.filter((u) => u.includes('model-a')).length, 2, 'only two keys are spent on the overloaded model');
+  assert.equal(urls.filter((u) => u.includes('model-b')).length, 1);
+});
+
+test('the built-in model list names models that exist today, newest first', () => {
+  delete process.env.GEMINI_MODELS;
+  const { geminiModels } = require('../src/lib/genai/gemini') as typeof import('../src/lib/genai/gemini');
+  const models = geminiModels();
+  assert.ok(models.length >= 2);
+  assert.ok(!models.some((id) => id.startsWith('gemini-2.')), `retired models in the default list: ${models.join(', ')}`);
+});

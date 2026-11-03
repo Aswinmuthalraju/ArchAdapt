@@ -53,7 +53,7 @@ export default function SiteHeader() {
 
   return (
     <header className="site-header" data-scrolled={scrolled}>
-      <Link href="/" className="site-badge" aria-label="ArchAdapt AI home" data-magnetic>
+      <Link href="/" className="site-badge" aria-label="ArchAdapt AI · Plans that fit · home" data-magnetic>
         <RotatingBadge />
       </Link>
       <nav className="site-nav" aria-label="Main">

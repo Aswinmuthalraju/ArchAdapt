@@ -109,7 +109,8 @@ async function runTests() {
 
     // Click Gallery in the header nav
     const galleryLink = page.locator('.site-nav-link[href="/styles"]');
-    if (await galleryLink.isVisible()) {
+    await galleryLink.waitFor({ state: 'visible', timeout: 10000 });
+    {
       await galleryLink.hover();
       await galleryLink.click();
       await page.waitForURL('**/styles');
@@ -130,7 +131,8 @@ async function runTests() {
     await page.goto(`${targetUrl}/how-it-works`, { waitUntil: 'networkidle' });
 
     const totalEl = page.locator('.rail-total');
-    if (await totalEl.isVisible()) {
+    await totalEl.waitFor({ state: 'visible', timeout: 10000 });
+    {
       const initialTotal = await totalEl.textContent();
       assert.equal(initialTotal, '07', `Expected rail total to be 07, got ${initialTotal}`);
 
@@ -160,9 +162,11 @@ async function runTests() {
     await page.goto(`${targetUrl}/styles`, { waitUntil: 'networkidle' });
 
     const header = page.locator('.site-header');
-    if (await header.isVisible()) {
+    await header.waitFor({ state: 'visible', timeout: 10000 });
+    {
       const keralaCard = page.locator('article.style-card', { hasText: 'Kerala Traditional' });
-      if (await keralaCard.isVisible()) {
+      await keralaCard.waitFor({ state: 'visible', timeout: 10000 });
+    {
         await keralaCard.scrollIntoViewIfNeeded();
         await page.waitForTimeout(600);
 
@@ -188,6 +192,8 @@ async function runTests() {
     // Step 1: Site
     await page.locator('#plot-width').fill('40');
     await page.locator('#plot-depth').fill('60');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC', 'base64');
+    await page.locator('#site-plan-upload').setInputFiles({ name: 'site.png', mimeType: 'image/png', buffer: png });
     await page.getByRole('button', { name: /Next: Your home/i }).click();
     await page.waitForTimeout(500);
 
@@ -197,12 +203,14 @@ async function runTests() {
 
     // Step 3: Switch to architect mode to choose built-in local engine
     const architectToggle = page.getByRole('button', { name: /I am an architect/i });
-    if (await architectToggle.isVisible()) {
+    await architectToggle.waitFor({ state: 'visible', timeout: 10000 });
+    {
       await architectToggle.click();
       await page.waitForTimeout(300);
     }
     const engineSelect = page.locator('#engine');
-    if (await engineSelect.isVisible()) {
+    await engineSelect.waitFor({ state: 'visible', timeout: 10000 });
+    {
       await engineSelect.selectOption('local');
     }
 
@@ -220,9 +228,15 @@ async function runTests() {
     assert.ok(await planSvg.isVisible(), '2D Floor Plan SVG must be visible');
     console.log('  PASSED: 2D floor plan rendered in workspace.');
 
+    // The uploaded site sketch is drawn under the plan, with its own toggle.
+    await page.getByRole('button', { name: 'Site sketch' }).waitFor({ state: 'visible', timeout: 8000 });
+    await page.locator('img[alt="Uploaded site sketch"]').waitFor({ state: 'visible', timeout: 5000 });
+    console.log('  PASSED: Uploaded site sketch is drawn under the 2D plan.');
+
     // Switch to 3D tab
     const tab3D = page.getByRole('tab', { name: /3D model/i });
-    if (await tab3D.isVisible()) {
+    await tab3D.waitFor({ state: 'visible', timeout: 10000 });
+    {
       await tab3D.click();
       await page.waitForTimeout(1500);
       const canvasEl = page.locator('canvas');
@@ -230,29 +244,59 @@ async function runTests() {
       console.log('  PASSED: 3D massing model rendered.');
     }
 
-    // Switch to Ask tab for What-If
-    const tabAsk = page.getByRole('tab', { name: /Assistant/i }).or(page.locator('button', { hasText: 'Ask' })).first();
-    if (await tabAsk.isVisible()) {
-      await tabAsk.click();
-      await page.waitForTimeout(400);
-    }
+    // What-If: on a wide screen the assistant is always open; on a narrow one it sits behind a tab. Either way the box must appear.
+    const tabAsk = page.getByRole('tab', { name: /Assistant/i });
+    if (await tabAsk.isVisible()) await tabAsk.click();
     const whatIfInput = page.locator('#whatif');
-    if (await whatIfInput.isVisible()) {
-      await whatIfInput.fill('Add a study upstairs');
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(2500);
-      console.log('  PASSED: What-If change submitted.');
-    }
+    await whatIfInput.waitFor({ state: 'visible', timeout: 10000 });
+    await whatIfInput.fill('Add a study upstairs');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2500);
+    assert.ok(await page.locator('#whatif').isVisible(), 'The assistant must stay usable after a What-If request');
+    console.log('  PASSED: What-If change submitted.');
 
     // Verify Export menu
     const exportBtn = page.getByRole('button', { name: /Export/i });
-    if (await exportBtn.isVisible()) {
+    await exportBtn.waitFor({ state: 'visible', timeout: 10000 });
+    {
       await exportBtn.click();
       await page.waitForTimeout(400);
       const dxfOption = page.locator('button', { hasText: /DXF/i }).or(page.locator('text=Floor plan drawing (.dxf)'));
       assert.ok(await dxfOption.isVisible(), 'DXF Export option must be visible');
       console.log('  PASSED: Export menu accessible.');
     }
+
+    // ==========================================
+    // Test 6: a phone can open every style page and start a plan in that style
+    // ==========================================
+    console.log('✓ TEST 6: Phone — style pages open, nothing overflows, Start preselects the style');
+    const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const mp = await phone.newPage();
+    const phoneErrors = [];
+    mp.on('pageerror', (err) => phoneErrors.push(err.message));
+    const slugs = ['kerala-traditional', 'modern', 'minimalist', 'contemporary', 'colonial', 'tropical', 'traditional-indian', 'modern-luxury'];
+    for (const slug of slugs) {
+      await mp.goto(`${targetUrl}/styles/${slug}`, { waitUntil: 'networkidle' });
+      await mp.locator('.style-feature-art svg').waitFor({ state: 'visible', timeout: 8000 });
+      const widths = await mp.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+      assert.ok(widths.sw <= widths.cw + 1, `${slug} scrolls sideways on a phone (${widths.sw} > ${widths.cw})`);
+    }
+    await mp.goto(`${targetUrl}/styles`, { waitUntil: 'networkidle' });
+    const firstMore = mp.locator('a.style-card-more').first();
+    await firstMore.scrollIntoViewIfNeeded();
+    await firstMore.tap();
+    await mp.waitForURL('**/styles/kerala-traditional', { timeout: 8000 });
+    const startLink = mp.locator('a[href*="onboarding?style=kerala-traditional"]').first();
+    await startLink.scrollIntoViewIfNeeded();
+    await startLink.tap();
+    await mp.waitForURL('**/onboarding**', { timeout: 8000 });
+    assert.equal(phoneErrors.length, 0, `Phone page errors: ${phoneErrors.join(' | ')}`);
+    await phone.close();
+    console.log('  PASSED: All 8 style pages fit a phone and open from the list.');
+
+    const missing = await page.goto(`${targetUrl}/styles/not-a-style`);
+    assert.equal(missing?.status(), 404, 'An unknown style should be a 404 page');
+    console.log('  PASSED: Unknown style shows the not-found page.\n');
 
     await browser.close();
     console.log('\n==============================================');

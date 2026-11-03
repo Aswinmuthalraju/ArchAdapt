@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { buildableEnvelope, defaultSetbacks } from '@/lib/design/layoutEngine';
 import { styleBySlug } from '@/lib/styles/styleCatalog';
+import { saveSitePlan, shrinkImage } from '@/lib/siteplan/sitePlanStore';
 
 type Audience = 'homeowner' | 'architect';
 type Precheck =
@@ -130,9 +131,12 @@ export default function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [briefKey, step]);
 
+  const sketchData = useRef<string | null>(null);
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    sketchData.current = null;
+    void shrinkImage(file).then((data) => { sketchData.current = data; });
     const isImage = file.type.startsWith('image/');
     setUploadedFile({ name: file.name, size: (file.size / (1024 * 1024)).toFixed(2) + ' MB', previewUrl: isImage ? URL.createObjectURL(file) : '' });
     if (accountUser) {
@@ -267,6 +271,7 @@ export default function OnboardingPage() {
           return;
         }
       }
+      if (sketchData.current && uploadedFile) saveSitePlan(projectId, sketchData.current);
       router.push(`/workspace/${projectId}`);
     } catch (err: any) {
       const isTimeout = err?.name === 'AbortError';
@@ -411,7 +416,7 @@ export default function OnboardingPage() {
                   {uploadedFile ? <><span className="font-bold text-stone-900">{uploadedFile.name}</span> <span className="text-stone-500">({uploadedFile.size})</span></> : <><span className="font-semibold text-stone-800">Attach a site plan or sketch (optional)</span><span className="block text-[11px] text-stone-500">PNG, JPG or PDF. Kept with your project for reference; dimensions come from the fields above.</span></>}
                 </span>
                 {uploadedFile && (
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setUploadedFile(null); }} className="inline-flex items-center gap-1 text-[11px] text-red-600 hover:underline"><X className="h-3 w-3" /> Remove</button>
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setUploadedFile(null); sketchData.current = null; }} className="inline-flex items-center gap-1 text-[11px] text-red-600 hover:underline"><X className="h-3 w-3" /> Remove</button>
                 )}
               </label>
             </div>

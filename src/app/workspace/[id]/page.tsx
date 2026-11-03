@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { loadSitePlan } from '@/lib/siteplan/sitePlanStore';
 import dynamic from 'next/dynamic';
 import FloorPlan2DRenderer from '@/components/canvas/FloorPlan2DRenderer';
 
@@ -58,6 +59,8 @@ export default function WorkspacePage() {
   const { status, user: authUser } = useAuthGuard();
   const params = useParams();
   const projectId = params?.id as string;
+  const [sitePlanUrl, setSitePlanUrl] = useState<string | null>(null);
+  useEffect(() => { if (projectId) setSitePlanUrl(loadSitePlan(projectId)); }, [projectId]);
 
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [project, setProject] = useState<Project | null>(null);
@@ -571,7 +574,7 @@ export default function WorkspacePage() {
 
         {/* Both views render the same canonical design object */}
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-plum-950">
-          {activeTab === '2d' && <FloorPlan2DRenderer design={activeDesign} selectedRoomId={selectedRoomId} onRoomSelect={(room) => setSelectedRoomId(room && room.id !== selectedRoomId ? room.id : undefined)} />}
+          {activeTab === '2d' && <FloorPlan2DRenderer sitePlanUrl={sitePlanUrl} design={activeDesign} selectedRoomId={selectedRoomId} onRoomSelect={(room) => setSelectedRoomId(room && room.id !== selectedRoomId ? room.id : undefined)} />}
           {activeTab === '3d' && <Massing3DViewer design={activeDesign} />}
           {activeTab === 'sheet' && analysis && (
             <DrawingSetPanel analysis={analysis} limits={limits} onLimitsChange={updateLimits} onRoomSelect={(id) => { setSelectedRoomId(id); setActiveTab('2d'); }} />

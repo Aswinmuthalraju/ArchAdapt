@@ -61,13 +61,13 @@ export default function Home({ plan }: { plan: ReactNode }) {
 
       // Hero intro, held until the preloader lifts.
       const intro = gsap.timeline({ paused: true, defaults: { ease: 'expo.out' } });
-      intro.fromTo(q('.hero-media-inner'), { scale: 1.25 }, { scale: 1, duration: 2.6 }, 0)
-        .fromTo(q('.hero-char'), { yPercent: 100, scaleY: 0, opacity: 0 }, { yPercent: 0, scaleY: 1, opacity: 1, duration: 1.5, stagger: 0.055 }, 0.15)
-        .fromTo(q('.hero-script'), { clipPath: 'inset(0% 100% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.8, ease: 'power2.inOut' }, 0.9)
-        .fromTo(q('.hero-script-line'), { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 1.2, ease: 'power3.inOut' }, 2.1)
-        .fromTo(q('.hero-tag--left'), { xPercent: -120, opacity: 0 }, { xPercent: 0, opacity: 1, duration: 1.6 }, 0.8)
-        .fromTo(q('.hero-tag--right'), { xPercent: 120, opacity: 0 }, { xPercent: 0, opacity: 1, duration: 1.6 }, 0.8)
-        .fromTo(q('[data-hero-fade]'), { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 1.2, stagger: 0.1 }, 1.2);
+      intro.fromTo(q('.hero-media-inner'), { scale: 1.25 }, { scale: 1, duration: 1.8 }, 0)
+        .fromTo(q('.hero-char'), { yPercent: 100, scaleY: 0, opacity: 0 }, { yPercent: 0, scaleY: 1, opacity: 1, duration: 0.9, stagger: 0.03 }, 0.05)
+        .fromTo(q('.hero-script'), { clipPath: 'inset(0% 100% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.1, ease: 'power2.inOut' }, 0.5)
+        .fromTo(q('.hero-script-line'), { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 0.8, ease: 'power3.inOut' }, 1.2)
+        .fromTo(q('.hero-tag--left'), { xPercent: -120, opacity: 0 }, { xPercent: 0, opacity: 1, duration: 1.0 }, 0.5)
+        .fromTo(q('.hero-tag--right'), { xPercent: 120, opacity: 0 }, { xPercent: 0, opacity: 1, duration: 1.0 }, 0.5)
+        .fromTo(q('[data-hero-fade]'), { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, stagger: 0.08 }, 0.7);
       let alive = true;
       introReady.then(() => { if (alive) intro.play(); });
 

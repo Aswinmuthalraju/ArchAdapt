@@ -10,7 +10,7 @@ module.exports = {
     extend: {
       colors: {
         // Warm editorial neutrals; legacy token names preserve existing component states.
-        stone: {"50":"#F4F1EA","100":"#ECE8DE","200":"#DDD8CC","300":"#C5BFB2","400":"#A39D92","500":"#7E7970","600":"#5E5A54","700":"#45423E","800":"#2E2C2B","900":"#1B1B1F","950":"#111114"},
+        stone: {"50":"#F4F1EA","100":"#ECE8DE","200":"#DDD8CC","300":"#C5BFB2","400":"#A39D92","500":"#6B665E","600":"#5E5A54","700":"#45423E","800":"#2E2C2B","900":"#1B1B1F","950":"#111114"},
         // Soft dusty plum: dark sections, the footer and the workspace surfaces.
         plum: {"DEFAULT":"#5D4052","600":"#A98399","700":"#86607A","800":"#6B4A5E","850":"#634558","900":"#5D4052","950":"#46303F"},
         // Bougainvillea. 500 and up are dark enough for small text on ivory.

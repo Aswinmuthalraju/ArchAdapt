@@ -247,7 +247,7 @@ function RegisterForm() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-stone-400 hover:text-stone-700 p-0.5"
+                  className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center text-stone-500 hover:text-stone-700"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -279,7 +279,7 @@ function RegisterForm() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-3 text-stone-400 hover:text-stone-700 p-0.5"
+                  className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center text-stone-500 hover:text-stone-700"
                   aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
                 >
                   {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

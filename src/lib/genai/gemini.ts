@@ -7,8 +7,10 @@ export type GeminiCallResult =
   | { ok: true; json: unknown; modelId: string }
   | { ok: false; kind: 'NO_KEY' | 'UNAVAILABLE' | 'BAD_RESPONSE' | 'INPUT_REJECTED'; detail: string; modelId?: string };
 
-const DEFAULT_MODELS = ['gemini-2.5-flash', 'gemini-2.5-pro'];
-const PER_CALL_TIMEOUT_MS = 90_000;
+const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+const PER_CALL_TIMEOUT_MS = 28_000;
+/** After this many timeouts or 503s on one model, the model itself is overloaded: move on instead of trying every key. */
+const OVERLOAD_LIMIT = 2;
 
 const KEY_ENV_NAMES = ['GENAI_API_KEY', 'GENAI_API_KEY_2', 'GENAI_API_KEY_3', 'GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3'];
 const KEY_COOLDOWN_MS = 60_000;
@@ -75,7 +77,12 @@ export async function callGeminiJson(systemPrompt: string, userPrompt: string, d
   const failures: string[] = [];
   let sawBadResponse: string | null = null;
   for (const modelId of geminiModels()) {
+    let overloaded = 0;
     for (const apiKey of keysToTry()) {
+      if (overloaded >= OVERLOAD_LIMIT) {
+        failures.push(`${modelId}: overloaded, skipping its remaining keys`);
+        break;
+      }
       const remaining = deadline - Date.now();
       if (remaining < 12_000) {
         failures.push(`${modelId}: skipped, time budget exhausted`);
@@ -102,6 +109,7 @@ export async function callGeminiJson(systemPrompt: string, userPrompt: string, d
           let status = '';
           try { const body = await res.json(); message = body?.error?.message || ''; status = body?.error?.status || ''; } catch { /* body not JSON */ }
           failures.push(`${label}: HTTP ${res.status}${message ? ` ${message.slice(0, 120)}` : ''}`);
+          if (res.status === 503 || res.status === 504) overloaded++;
           if ([401, 403, 429].includes(res.status) || res.status >= 500) coolingUntil.set(apiKey, Date.now() + KEY_COOLDOWN_MS);
           // A malformed request is the same for every key: stop and say the input was the problem.
           // (A bad key also answers 400 "API key not valid"; that one is the key's fault, so it moves on.)
@@ -138,6 +146,7 @@ export async function callGeminiJson(systemPrompt: string, userPrompt: string, d
           continue;
         }
       } catch (err: any) {
+        if (err?.name === 'AbortError') overloaded++;
         failures.push(`${label}: ${err?.name === 'AbortError' ? 'timed out' : err?.message || 'network error'}`);
       } finally {
         clearTimeout(timer);

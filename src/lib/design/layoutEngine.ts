@@ -953,6 +953,59 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     }
   }
 
+  // A study or guest room stretched along a deep band (a 6.5 ft x 29 ft "study") is not usable. A run of such rooms
+  // is cut back to a sensible depth, and the freed strip beside the circulation becomes one family lounge.
+  {
+    const elongated = (entry: PlacedRoom) => ['study', 'guest_room'].includes(entry.room.type) && !entry.room.derived && entry.rect.d >= 18 && entry.rect.d / entry.rect.w >= 2.6 && entry.rect.w <= entry.rect.d;
+    const runs = new Map<string, PlacedRoom[]>();
+    for (const entry of placed.filter(elongated)) {
+      const key = `${entry.room.floor}|${round2(entry.rect.y)}|${round2(entry.rect.d)}`;
+      runs.set(key, [...(runs.get(key) || []), entry]);
+    }
+    runs.forEach((group) => {
+      group.sort((a, b) => a.rect.x - b.rect.x);
+      const contiguous = group.every((entry, i) => i === 0 || Math.abs(group[i - 1].rect.x + group[i - 1].rect.w - entry.rect.x) < 0.3);
+      if (!contiguous) return;
+      const { y, d } = group[0].rect;
+      const x0 = group[0].rect.x;
+      const x1 = group[group.length - 1].rect.x + group[group.length - 1].rect.w;
+      const narrow = Math.min(...group.map((entry) => entry.rect.w));
+      const keep = Math.min(d - 8, Math.max(12, narrow * 2.4));
+      const rest = d - keep;
+      if (keep < 10 || rest < 8 || x1 - x0 < 8) return;
+      const floor = group[0].room.floor;
+      const hub = (rect: Rect) => placed.some((other) => !group.includes(other) && other.room.floor === floor && ['passage', 'stair', 'living', 'dining', 'lounge'].includes(other.room.type) && (sharedEdge(rect, other.rect)?.length ?? 0) >= 3);
+      const options = [false, true].map((keepBack) => ({ keepBack, lounge: { x: x0, y: keepBack ? y : y + keep, w: x1 - x0, d: rest } })).filter((option) => hub(option.lounge));
+      const pick = options[0];
+      if (!pick) return;
+      group.forEach((entry) => {
+        entry.rect = { ...entry.rect, y: pick.keepBack ? y + rest : y, d: keep };
+        entry.room.area = entry.rect.w * entry.rect.d;
+      });
+      placed.push({
+        room: { ...group[0].room, id: `room-lounge-${floor}-${++derivedCount}`, name: 'Family Lounge', type: 'lounge', derived: false, required: false, attachedTo: undefined, area: pick.lounge.w * pick.lounge.d, relationships: [], features: [] },
+        rect: pick.lounge
+      });
+      notes.push(`The ${group.map((entry) => entry.room.name.toLowerCase()).join(' and ')} would have been a narrow strip, so the space behind ${group.length > 1 ? 'them' : 'it'} became a family lounge.`);
+    });
+  }
+
+  // An upstairs gap-filler balcony that no door can reach is just a dead patch of floor. Try the doors once,
+  // and drop any such leftover so the plan only shows balconies a person can actually step onto.
+  {
+    const trialCells = placed.map((p) => ({
+      id: p.room.id, type: p.room.type, floor: p.room.floor,
+      rect: { x: round2(originX + p.rect.x), y: round2(originY + p.rect.y), w: round2(p.rect.w), d: round2(p.rect.d) },
+      name: p.room.name, attachedTo: p.room.attachedTo, relationships: p.room.relationships
+    }));
+    const trial = solveOpenings(trialCells, { floors, orientation: site.orientation, modes: constraints.modes });
+    const orphan = new Set(placed.filter((p) => p.room.derived && p.room.floor > 0 && ['terrace', 'balcony'].includes(p.room.type) && trial.unreachable.includes(p.room.id)).map((p) => p.room.id));
+    if (orphan.size) {
+      for (let i = placed.length - 1; i >= 0; i--) if (orphan.has(placed[i].room.id)) placed.splice(i, 1);
+      notes.push('A leftover upstairs balcony that no door could reach was left out of the plan.');
+    }
+  }
+
   // ---- Canonical design object ----
   const cells: PlanCell[] = placed.map((p) => ({
     id: p.room.id,

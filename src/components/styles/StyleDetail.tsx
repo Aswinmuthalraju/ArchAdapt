@@ -52,7 +52,7 @@ export default function StyleDetail({ style, index, next, prev }: { style: Style
       </section>
 
       <section className="style-process" data-section="Process" data-bg="sky" data-header="ink">
-        <p className="label">How we design it</p>
+        <h2 className="label">How we design it</h2>
         <ol className="step-list">
           {style.process.map((step, i) => (
             <li key={step.title} data-fade>

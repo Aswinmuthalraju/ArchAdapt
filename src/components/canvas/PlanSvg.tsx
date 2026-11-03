@@ -99,6 +99,14 @@ const ftLabel = (value: number) => {
   return `${rounded}'`;
 };
 
+/** Where the plot sits inside the square canvas, as fractions of its width and height. */
+export function plotFrame(design: StructuredDesignJSON) {
+  const w = design.plot?.width || 40;
+  const d = design.plot?.depth || 60;
+  const scale = (PLAN_CANVAS - MARGIN * 2) / Math.max(w, d);
+  return { left: (PLAN_CANVAS - w * scale) / 2 / PLAN_CANVAS, top: (PLAN_CANVAS - d * scale) / 2 / PLAN_CANVAS, width: (w * scale) / PLAN_CANVAS, height: (d * scale) / PLAN_CANVAS };
+}
+
 interface PlanSvgProps {
   design: StructuredDesignJSON;
   floor: number;
