@@ -161,6 +161,12 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
     } else if (typeSpec.habitable && longSide / shortSide > 3.2) {
       warnings.push(`${room.name} is very elongated (${shortSide.toFixed(1)} ft x ${longSide.toFixed(1)} ft).`);
     }
+    // A "bathroom" the size of a bedroom is a mislabelled room (or a leftover gap): ask for it to be given a real purpose.
+    if (type === 'bathroom' && !room.derived && area > 120) {
+      const message = `${room.name} would be ${Math.round(area)} sq ft, far larger than a bathroom (usually 35-90 sq ft). Give that space a real purpose such as a study, guest room or store, or make the bathroom smaller.`;
+      if (area > 190) fail('geometry', 'BATHROOM_TOO_LARGE', message);
+      else warnings.push(message);
+    }
     if (type === 'parking' && longSide < 14.5) fail('geometry', 'PARKING_TOO_SHORT', `${room.name} is only ${longSide.toFixed(1)} ft long; a car needs about 15 ft.`);
   }
   for (let i = 0; i < cells.length; i++) {

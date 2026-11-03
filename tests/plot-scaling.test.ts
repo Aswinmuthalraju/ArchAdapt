@@ -59,3 +59,23 @@ test('input validation explains what is wrong in plain language', () => {
   assert.ok(validateBriefInput(site, brief(0, 2))[0].includes('Bedrooms'));
   assert.ok(validateBriefInput({ ...site, setbacks: { front: 30, rear: 30, left: 20, right: 20 } }, brief(3, 2))[0].includes('too small'));
 });
+
+test('a courtyard that cannot be enclosed on a very large plot is drawn open and explained, not refused', async () => {
+  const outcome = await generateDesign({
+    site: { plotWidth: 100, plotDepth: 150, totalArea: 15000, orientation: 'N' }, location,
+    requirements: { ...brief(2, 1), spaces: { ...brief(2, 1).spaces, courtyard: true, outdoorGarden: true, prayerRoom: true, studyWorkspace: true, guestRoom: true, balcony: true, storage: true } },
+    preferences: { modes: [], primaryStyle: 'Modern' }, engine: 'local'
+  });
+  assert.equal(outcome.status, 'OK', JSON.stringify(outcome));
+  if (outcome.status === 'OK') assert.ok(outcome.design.rooms.some((room) => room.roomType === 'courtyard'));
+});
+
+test('no bathroom in any plan is drawn larger than 190 sq ft', async () => {
+  for (const [w, d] of [[30, 50], [60, 40], [40, 60]] as const) {
+    for (const bedrooms of [1, 2, 3]) {
+      const outcome = await generateDesign({ site: { plotWidth: w, plotDepth: d, totalArea: w * d, orientation: 'E' }, location, requirements: brief(bedrooms, 2), preferences: { modes: ['budget_first'], primaryStyle: 'Modern' }, engine: 'local' });
+      if (outcome.status !== 'OK') continue;
+      for (const room of outcome.design.rooms.filter((r) => r.roomType === 'bathroom')) assert.ok(room.areaSqFt <= 190, `${w}x${d} ${bedrooms}BR ${room.name} ${room.areaSqFt}`);
+    }
+  }
+});

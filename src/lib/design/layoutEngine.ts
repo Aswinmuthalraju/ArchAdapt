@@ -866,6 +866,39 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     entry.room.relationships = (entry.room.relationships || []).map((rel) => (rel.target === previous && ['ATTACHED_TO', 'CONNECTED_TO', 'ADJACENT_TO'].includes(rel.type) ? { ...rel, target: anchorId } : rel));
   });
 
+  // A bathroom that was stretched to fill an otherwise empty zone (for example the ground floor under a bedroom) must not be
+  // drawn as a 160 sq ft bath: it keeps a bathroom-sized part and the rest becomes a usable study, stated in the notes.
+  for (const entry of [...placed]) {
+    if (entry.room.type !== 'bathroom' || entry.room.derived) continue;
+    const { x, y, w, d } = entry.rect;
+    if (w * d <= 110) continue;
+    const alongX = w >= d;
+    const shortSide = alongX ? d : w;
+    const longSide = alongX ? w : d;
+    const bathLong = Math.min(longSide - 4, Math.max(5, 55 / shortSide));
+    if (bathLong < 5) continue;
+    const spare: RoomType = shortSide >= 8 && longSide - bathLong >= 8 ? 'study' : 'store';
+    const rest = longSide - bathLong;
+    // Both parts must open off circulation, so only an arrangement where each touches a hub room is accepted.
+    const arrangements = [false, true].map((spareFirst) => {
+      const bathRect = alongX ? { x: spareFirst ? x + rest : x, y, w: bathLong, d } : { x, y: spareFirst ? y + rest : y, w, d: bathLong };
+      const studyRect = alongX ? { x: spareFirst ? x : x + bathLong, y, w: rest, d } : { x, y: spareFirst ? y : y + bathLong, w, d: rest };
+      const hub = (rect: Rect) => placed.some((other) => other !== entry && other.room.floor === entry.room.floor && ['passage', 'stair', 'living', 'dining', 'lounge'].includes(other.room.type) && (sharedEdge(rect, other.rect)?.length ?? 0) >= 3);
+      const touchesHub = hub(studyRect) && hub(bathRect);
+      return { bathRect, studyRect, touchesHub };
+    });
+    const chosenArrangement = arrangements.find((option) => option.touchesHub);
+    if (!chosenArrangement) continue;
+    const { bathRect, studyRect } = chosenArrangement;
+    entry.rect = bathRect;
+    entry.room.area = bathRect.w * bathRect.d;
+    placed.push({
+      room: { ...entry.room, id: `room-${spare}-${entry.room.floor}-${++derivedCount}`, name: spare === 'study' ? 'Study' : 'Store', type: spare, derived: false, attachedTo: undefined, area: studyRect.w * studyRect.d, relationships: [] },
+      rect: studyRect
+    });
+    notes.push(`The space beside the ${entry.room.name.toLowerCase()} on the ${floorName(entry.room.floor).toLowerCase()} was too large for a bathroom alone, so it was given a ${spare}.`);
+  }
+
   // A room squeezed below a usable size means the programme does not fit: say so rather than draw it.
   const squeezed = placed.filter((p) => {
     if (p.room.derived || p.room.type === 'void') return false;
@@ -897,7 +930,11 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
         return edge && edge.orientation === orientation && Math.abs(edge.at - at) < 0.1 ? edge.length : 0;
       })) / length;
     const open = [closed('horizontal', y, w), closed('horizontal', y + d, w), closed('vertical', x, d), closed('vertical', x + w, d)].some((share) => share < 0.85);
-    if (open) {
+    // On a generous envelope a court that meets an outer wall is still a good court (a garden court open on one side);
+    // refusing the brief would be worse than saying plainly how it was drawn. Small plots keep the strict rule.
+    if (open && envWidth * envDepth >= 3000) {
+      notes.push(`"${court.room.name}" meets an outside wall on at least one side of this ${fmtFt(envWidth)} x ${fmtFt(envDepth)} envelope, so it is drawn as a garden court open on that side rather than one closed on all four.`);
+    } else if (open) {
       return {
         ok: false,
         reason: `"${court.room.name}" cannot be enclosed by rooms on this ${fmtFt(envWidth)} x ${fmtFt(envDepth)} buildable envelope; it would sit against an outside wall.`,
