@@ -27,10 +27,10 @@ interface PetalState {
 }
 
 const PALETTES = [
-  { base: '#C98AA7', mid: '#DDAFC4', tip: '#FAF3F6' }, // Bougainvillea magenta
-  { base: '#D590AE', mid: '#E6B8CB', tip: '#FFF7FA' }, // Soft rose
-  { base: '#B97796', mid: '#D4A1B9', tip: '#F4E0E9' }, // Deep blossom
-  { base: '#DFA3BC', mid: '#EBC4D4', tip: '#FDF6F9' }, // Vibrant cherry pink
+  { base: '#C2185B', mid: '#E91E63', tip: '#FCE4EC' }, // Bougainvillea magenta
+  { base: '#D81B60', mid: '#F06292', tip: '#FFF0F5' }, // Soft rose
+  { base: '#AD1457', mid: '#EC407A', tip: '#F8BBD0' }, // Deep blossom
+  { base: '#E0218A', mid: '#F472B6', tip: '#FDF2F8' }, // Vibrant cherry pink
 ];
 
 /** Realistic organic flower petal path with tapered calyx base, curved flanks, and apical notch */

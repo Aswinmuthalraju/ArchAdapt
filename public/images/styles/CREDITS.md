@@ -1,13 +1,12 @@
 # Image credits
 
-The eight architectural styles are shown with original vector illustrations
-(`src/components/styles/StyleIllustration.tsx`), so they always match the style
-they describe and need no photo licence.
-
-The four photographs kept here illustrate the design modes on the home page.
+Photographs of real buildings, matched to the style each one shows.
 
 | File | Subject | Source / licence |
 |---|---|---|
-| climate-adaptive.jpg | Deep timber verandah of a Kerala nalukettu | Wikimedia Commons, "Varanda nalukettu", CC BY-SA 4.0 (Sankarkeloth) |
-| renovation.jpg | Old tiled-roof colonial-era house under restoration | Wikimedia Commons, "Colonial Style Villa", CC BY-SA 4.0 |
-| budget-first.jpg, life-stage.jpg | Contemporary residential photography | Unsplash licence |
+| kerala-traditional.jpg | Traditional tiled-roof Kerala house with pillared sit-out | Wikimedia Commons, "Traditional kerala house.jpg", CC BY-SA 4.0 |
+| traditional-indian.jpg | Haveli courtyard with fountain and jali screens, Ranthambhore | Wikimedia Commons, "Courtyard of the Ranthambhore Heritage Haveli Hotel", CC0 |
+| colonial.jpg | Indo-European colonial house, Fort Kochi | Wikimedia Commons, "'David Hall'", CC0 |
+| tropical.jpg | Garden bungalow with deep eaves, Lunuganga | Wikimedia Commons, "Lunuganga - Bungalow Back", CC BY-SA 4.0 |
+| modern.jpg, minimalist.jpg, contemporary.jpg, modern-luxury.jpg | Contemporary residential photography | Unsplash licence |
+| budget-first.jpg, climate-adaptive.jpg, life-stage.jpg, renovation.jpg | Used by the design-mode pages | See earlier credits in git history |

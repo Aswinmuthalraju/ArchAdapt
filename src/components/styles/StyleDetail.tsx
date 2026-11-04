@@ -6,7 +6,7 @@ import MotionPage from '@/components/marketing/site/MotionPage';
 import CircleButton from '@/components/motion/CircleButton';
 import SplitText from '@/components/motion/SplitText';
 import type { StyleEntry } from '@/lib/styles/styleCatalog';
-import StyleIllustration from './StyleIllustration';
+import StylePhoto from './StylePhoto';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -21,7 +21,7 @@ export default function StyleDetail({ style, index, next, prev }: { style: Style
 
       <section className="style-feature" data-section="Look" data-bg="ivory" data-header="ink">
         <div className="style-feature-art">
-          <StyleIllustration style={style} />
+          <StylePhoto style={style} sizes="(max-width: 899px) 100vw, 60vw" priority />
         </div>
         <div className="style-feature-facts" data-fade>
           <p className="label label--muted">At a glance</p>

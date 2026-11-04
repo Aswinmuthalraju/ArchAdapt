@@ -10,7 +10,7 @@ import CircleButton from '@/components/motion/CircleButton';
 import SplitText from '@/components/motion/SplitText';
 import { gsap, MQ, useGSAP } from '@/lib/motion';
 import Petals from './Petals';
-import StyleIllustration from '@/components/styles/StyleIllustration';
+import StylePhoto from '@/components/styles/StylePhoto';
 import { STYLE_CATALOG } from '@/lib/styles/styleCatalog';
 import Preloader, { introReady } from './Preloader';
 
@@ -197,7 +197,7 @@ export default function Home({ plan }: { plan: ReactNode }) {
               <Link key={style.slug} href={`/styles/${style.slug}`} className="gallery-card" prefetch={false} data-cursor="View">
                 <div className="gallery-card-media">
                   <div className="gallery-card-img">
-                    <StyleIllustration style={style} title={`${style.name} house`} />
+                    <StylePhoto style={style} sizes="(max-width: 899px) 78vw, 28vw" />
                   </div>
                 </div>
                 <div className="gallery-card-meta">

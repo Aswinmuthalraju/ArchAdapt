@@ -33,8 +33,11 @@ test('every style has the content its page needs', () => {
   }
 });
 
-test('the style illustrations exist for every slug', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../src/components/styles/StyleIllustration.tsx'), 'utf8');
-  const scenes = source.slice(source.indexOf('const SCENES'));
-  for (const s of STYLE_CATALOG) assert.ok(scenes.includes(`'${s.slug}':`) || scenes.includes(`${s.slug}:`), `${s.slug} illustration`);
+test('every style has a real photo and a credit line', () => {
+  const dir = path.join(__dirname, '../public/images/styles');
+  const credits = fs.readFileSync(path.join(dir, 'CREDITS.md'), 'utf8');
+  for (const s of STYLE_CATALOG) {
+    assert.ok(fs.existsSync(path.join(dir, `${s.slug}.jpg`)), `${s.slug} photo`);
+    assert.ok(credits.includes(`${s.slug}.jpg`), `${s.slug} credit`);
+  }
 });

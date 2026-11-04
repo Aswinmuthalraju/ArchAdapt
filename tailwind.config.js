@@ -11,15 +11,15 @@ module.exports = {
       colors: {
         // Warm editorial neutrals; legacy token names preserve existing component states.
         stone: {"50":"#F4F1EA","100":"#ECE8DE","200":"#DDD8CC","300":"#C5BFB2","400":"#A39D92","500":"#6B665E","600":"#5E5A54","700":"#45423E","800":"#2E2C2B","900":"#1B1B1F","950":"#111114"},
-        // Soft dusty plum: dark sections, the footer and the workspace surfaces.
-        plum: {"DEFAULT":"#5D4052","600":"#A98399","700":"#86607A","800":"#6B4A5E","850":"#634558","900":"#5D4052","950":"#46303F"},
+        // Deep wine plum: dark sections, the footer and the workspace surfaces.
+        plum: {"DEFAULT":"#4A1030","600":"#8A4A6C","700":"#66284A","800":"#5A1A40","850":"#521537","900":"#4A1030","950":"#340A22"},
         // Bougainvillea. 500 and up are dark enough for small text on ivory.
-        magenta: {"50":"#FAF3F6","100":"#F4E6EC","200":"#EBCFDB","300":"#DDAFC4","400":"#C98AA7","500":"#9A5675","600":"#7E4560","700":"#5D4052"},
+        magenta: {"50":"#FDF0F6","100":"#FBE0EE","200":"#F6B8D6","300":"#F28BC0","400":"#EC5BA6","500":"#A8176A","600":"#8F0E57","700":"#4A1030"},
         gold: {"DEFAULT":"#C9A227","100":"#FAF1D2","200":"#F0DE9E","300":"#E8CF7A","400":"#C9A227","500":"#A88418","600":"#8C6A12","700":"#6A500D"},
         ivory: '#F4F1EA',
         ink: '#1B1B1F',
         sky: '#B9D3E6',
-        blossom: { DEFAULT: '#D590AE', soft: '#F1D9E4' },
+        blossom: { DEFAULT: '#E0218A', soft: '#F6B8D6' },
         sage: { 500: '#4A6B5D' },
         blueprint: { 500: '#2B5B84', 600: '#1E4364' },
       },

@@ -7,7 +7,7 @@ import MotionPage from '@/components/marketing/site/MotionPage';
 import Blossom from '@/components/motion/Blossom';
 import CircleButton from '@/components/motion/CircleButton';
 import SplitText from '@/components/motion/SplitText';
-import StyleIllustration from '@/components/styles/StyleIllustration';
+import StylePhoto from '@/components/styles/StylePhoto';
 import { STYLE_CATALOG } from '@/lib/styles/styleCatalog';
 
 export default function ArchitecturalStylesPage() {
@@ -42,7 +42,7 @@ export default function ArchitecturalStylesPage() {
               <Link href={`/styles/${st.slug}`} className="style-card-link" aria-label={`${st.name}: see how we design it`}>
                 <div className="style-card-media" data-curtain data-cursor="View">
                   <div className="style-card-img" data-curtain-img>
-                    <StyleIllustration style={st} />
+                    <StylePhoto style={st} sizes="(max-width: 899px) 100vw, 45vw" />
                   </div>
                 </div>
               </Link>

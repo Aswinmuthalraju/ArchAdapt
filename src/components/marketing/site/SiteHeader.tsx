@@ -40,11 +40,20 @@ export default function SiteHeader() {
 
   const account = signedIn ? { name: 'My projects', href: '/dashboard' } : { name: 'Sign in', href: '/login' };
   const [scrolled, setScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
+    let lastY = window.scrollY;
     const handleScroll = () => {
-      const isScrolled = window.scrollY > 40;
+      const y = window.scrollY;
+      const isScrolled = y > 40;
       setScrolled((prev) => (prev !== isScrolled ? isScrolled : prev));
+      // Hide while reading down the page, bring it back as soon as the visitor scrolls up.
+      if (Math.abs(y - lastY) > 6) {
+        const hide = y > 160 && y > lastY;
+        setHidden((prev) => (prev !== hide ? hide : prev));
+        lastY = y;
+      }
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
@@ -52,7 +61,7 @@ export default function SiteHeader() {
   }, []);
 
   return (
-    <header className="site-header" data-scrolled={scrolled}>
+    <header className="site-header" data-scrolled={scrolled} data-hidden={hidden && !open}>
       <Link href="/" className="site-badge" aria-label="ArchAdapt AI · Plans that fit · home" data-magnetic>
         <RotatingBadge />
       </Link>
