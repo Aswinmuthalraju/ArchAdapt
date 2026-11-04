@@ -29,26 +29,25 @@
 
 ---
 
-## 3. Permanent Resolution of `.next` Cache Corruption (`layout.css 404`)
+## 3. Separate Development and Production Build Outputs
 
 ### 3.1 Root Cause Analysis
-- **The Conflict:** Running `npm run build` (`next build`) to verify compilation while an active `next dev` process was running in the background wiped `.next/static/css/` and `.next/server/` on disk and replaced them with production hashes.
-- **The Consequence:** The running dev server held in-memory Webpack mappings to old dev CSS filenames. When the user refreshed `http://localhost:3000`, the server returned `404 Not Found` for `layout.css`, causing the browser to render raw unstyled HTML.
+- Development and production builds originally shared `.next`. A production build could replace development assets while a dev server was still running, leaving its in-memory asset references stale and causing CSS 404s.
 
-### 3.2 Permanent Architectural Fix in `package.json`
-Configured `package.json` with an automated clean pre-hook:
+### 3.2 Permanent Fix in `next.config.mjs`
+Development uses `.next-dev`; production uses `.next`. The explicit `clean` script removes both output folders when a fresh build is needed. Current commands are:
 ```json
 "scripts": {
-  "clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }) } catch(e) {}\"",
-  "dev": "npm run clean && next dev -p 3000",
-  "build": "npm run clean && next build",
+  "clean": "node -e \"for (const d of ['.next', '.next-dev']) require('fs').rmSync(d, { recursive: true, force: true })\"",
+  "dev": "next dev -p 3000",
+  "build": "next build --webpack",
   "start": "next start -p 3000",
-  "lint": "next lint"
+  "lint": "eslint ."
 }
 ```
 
 ### 3.3 Development Lifecycle Rules
-1. **Never run `npm run build` while `npm run dev` is active.** Always terminate running dev servers via `manage_task` (or PowerShell `Stop-Process`) before executing a production build check.
+1. Development and production builds can use separate output folders. Do not run `npm run clean` while a dev server is active because that command removes both folders.
 2. **Hard Refresh:** If a browser caches a 404 CSS response, press **`Ctrl + F5`** (or **`Ctrl + Shift + R`**) on `http://localhost:3000`.
 
 ---
@@ -60,7 +59,7 @@ Configured `package.json` with an automated clean pre-hook:
   ```powershell
   npm run dev
   ```
-  *(Automatically cleans `.next` and starts on port 3000)*
+  *(Uses `.next-dev` and starts on port 3000)*
 
 - **Build Production Bundle:**
   ```powershell

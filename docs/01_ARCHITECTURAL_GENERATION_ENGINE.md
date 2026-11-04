@@ -130,7 +130,7 @@ Every generated design carries a structured `planExplanation` object detailing:
 
 ## 6. Verification & Test Suite
 
-The engine is protected by a comprehensive test suite covering 84 automated tests across:
+The engine is protected by a comprehensive test suite covering 93 automated tests across:
 - **Architectural Regressions:** Aspect ratios, courtyard enclosures, stair landings, openings.
 - **Sweep Matrix:** 224 combinations across 8 styles $\times$ 7 plots $\times$ 4 briefs.
 - **Gemini Failover:** Rate limiting, malformed response handling, timeouts, model fallback.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import type { JSX } from 'react';
 import { Canvas, ThreeEvent, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Environment, Lightformer, OrbitControls, OrthographicCamera, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';

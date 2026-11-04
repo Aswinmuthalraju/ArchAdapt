@@ -2,7 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Jost';
+  src: url('/fonts/jost-latin-wght-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Bodoni Moda';
+  src: url('/fonts/bodoni-moda-latin-wght-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Pinyon Script';
+  src: url('/fonts/pinyon-script-latin-400-normal.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
+  --font-sans: 'Jost';
+  --font-serif: 'Bodoni Moda';
+  --font-script: 'Pinyon Script';
   --ivory: #F4F1EA;
   --ink: #1B1B1F;
   --plum: #5D4052;

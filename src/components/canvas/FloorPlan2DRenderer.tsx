@@ -237,7 +237,6 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
           className="relative aspect-square h-full max-h-[860px] max-w-full will-change-transform"
         >
           {sitePlanUrl && showSketch && (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={sitePlanUrl} alt="Uploaded site sketch" draggable={false} className="pointer-events-none absolute z-[1] object-fill mix-blend-multiply" style={{ left: `${frame.left * 100}%`, top: `${frame.top * 100}%`, width: `${frame.width * 100}%`, height: `${frame.height * 100}%`, opacity: sketchOpacity }} />
           )}
           <PlanSvg

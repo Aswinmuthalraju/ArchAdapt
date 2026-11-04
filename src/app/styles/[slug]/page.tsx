@@ -9,14 +9,16 @@ export function generateStaticParams() {
   return STYLE_CATALOG.map((s) => ({ slug: s.slug }));
 }
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  const style = styleBySlug(params.slug);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const style = styleBySlug(slug);
   if (!style) return { title: 'Style not found | ArchAdapt AI' };
   return { title: `${style.name} | ArchAdapt AI`, description: style.overview };
 }
 
-export default function StylePage({ params }: { params: { slug: string } }) {
-  const style = styleBySlug(params.slug);
+export default async function StylePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const style = styleBySlug(slug);
   if (!style) notFound();
   const index = STYLE_CATALOG.findIndex((s) => s.slug === style.slug);
   const next = STYLE_CATALOG[(index + 1) % STYLE_CATALOG.length];

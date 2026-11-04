@@ -1,5 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
-
 interface BlossomProps {
   branch: 'a' | 'b' | 'c';
   /** Which edge it slides in from. */

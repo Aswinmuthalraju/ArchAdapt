@@ -9,7 +9,7 @@
 ## 1. Platform Core Architecture & Tech Stack
 
 ArchAdapt AI is built with modern, production-grade web technologies:
-- **Framework:** Next.js 14 (App Router) with TypeScript.
+- **Framework:** Next.js 16 (App Router) with React 19 and TypeScript.
 - **Frontend & Styling:** Vanilla Tailwind CSS v3 with responsive layout architecture and warm architectural agency palette (Warm Stone, Terracotta, Charcoal).
 - **3D Visualization:** Three.js, React Three Fiber (`@react-three/fiber`), and Drei (`@react-three/drei`).
 - **Database & Auth:** Supabase PostgreSQL with Google OAuth authentication and row-level security.

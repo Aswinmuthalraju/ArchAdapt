@@ -1,6 +1,6 @@
 # ArchadaptAI
 
-ArchadaptAI is a residential architectural generation engine built on Next.js 14, React 18, TypeScript, Tailwind CSS, Three.js, Supabase, and Gemini.
+ArchadaptAI is a residential architectural generation engine built on Next.js 16, React 19, TypeScript, Tailwind CSS, Three.js, Supabase, and Gemini.
 
 It turns family requirements, site dimensions, and cultural design preferences into verified, buildable architectural floor plans and 3D massing models.
 
@@ -50,10 +50,10 @@ If no Gemini API key is configured or if the external AI service is unreachable,
 ## Developer Commands
 
 ```bash
-# Install dependencies
-npm install
+# Install the locked dependencies (Node.js 22 or newer)
+npm ci
 
-# Run unit test suite (84 automated tests)
+# Run unit test suite (93 automated tests)
 npm test
 
 # Run 224-combination architectural quality sweep (with thresholds)

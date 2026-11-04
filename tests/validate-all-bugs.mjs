@@ -1,6 +1,9 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
+
+const nextBin = path.resolve('node_modules/next/dist/bin/next');
 
 async function isServerRunning(url) {
   try {
@@ -18,8 +21,7 @@ async function runTests() {
   const running = await isServerRunning(targetUrl);
   if (!running) {
     console.log('[E2E Setup] Starting Next.js server on port 3000...');
-    serverProcess = spawn('npx', ['next', 'start', '-p', '3000'], {
-      shell: true,
+    serverProcess = spawn(process.execPath, [nextBin, 'start', '-p', '3000'], {
       stdio: 'pipe'
     });
 
@@ -32,8 +34,7 @@ async function runTests() {
     if (!await isServerRunning(targetUrl)) {
       console.warn('[E2E Setup] Production build server not responding; attempting next dev...');
       if (serverProcess) serverProcess.kill();
-      serverProcess = spawn('npx', ['next', 'dev', '-p', '3000'], {
-        shell: true,
+      serverProcess = spawn(process.execPath, [nextBin, 'dev', '-p', '3000'], {
         stdio: 'pipe'
       });
       attempts = 0;
@@ -55,9 +56,13 @@ async function runTests() {
     const page = await context.newPage();
 
     const pageErrors = [];
+    const browserErrors = [];
     page.on('pageerror', (err) => {
       console.error('  [UNEXPECTED PAGE ERROR]:', err.message);
       pageErrors.push(err);
+    });
+    page.on('console', (message) => {
+      if (message.type() === 'error') browserErrors.push(message.text());
     });
 
     // ==========================================
@@ -238,8 +243,13 @@ async function runTests() {
     await tab3D.waitFor({ state: 'visible', timeout: 10000 });
     {
       await tab3D.click();
-      await page.waitForTimeout(1500);
       const canvasEl = page.locator('canvas');
+      try {
+        await canvasEl.waitFor({ state: 'visible', timeout: 15000 });
+      } catch (error) {
+        console.error('  [3D DIAGNOSTICS]', { pageErrors: pageErrors.map((e) => e.message), browserErrors });
+        throw error;
+      }
       assert.ok(await canvasEl.isVisible(), '3D Canvas must be visible');
       console.log('  PASSED: 3D massing model rendered.');
     }

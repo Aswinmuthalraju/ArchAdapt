@@ -1,6 +1,6 @@
 # ArchadaptAI V1.4 Hand-off (verified)
 
-**Branch:** `release/v1.4` · **Version:** 1.4.0
+**Branch:** `main` · **Version:** 1.4.0
 
 This replaces the earlier hand-off. Every number below was re-measured on this branch, not copied from an earlier report.
 

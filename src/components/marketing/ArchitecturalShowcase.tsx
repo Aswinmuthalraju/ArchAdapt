@@ -43,7 +43,6 @@ export default function ArchitecturalShowcase() {
     <div className="showcase-viewport">
       <div className="showcase-quiet-word" aria-hidden="true">Space to live.</div>
       {!ready && <div className="showcase-fallback">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/images/residential-interior.jpg" alt="A residential interior opening onto a garden" />
         <p>{supported === false ? 'A considered home, inside and out.' : 'Preparing your architectural model…'}</p>
       </div>}
