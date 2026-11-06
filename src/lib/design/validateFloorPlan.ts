@@ -1,6 +1,7 @@
 import { DesignConstraints, DesignIssue, RoomType, StructuredDesignJSON } from '@/types/architectural';
 import { designCells, rectOverlapArea, sharedEdge } from '@/lib/geometry/planGeometry';
 import { isInStairMouth } from '@/lib/geometry/stairGeometry';
+import { computeEnvelope } from './planner/envelope';
 import { REQUIRED_SPACE_TYPES, ROOM_TYPE_SPECS, countBedrooms, countRoomsOfType, floorName, inferRoomType, isBedroomType } from './roomTypes';
 
 export interface ValidationReport {
@@ -131,6 +132,10 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
 
   // ---------- 3. Geometry ----------
   const setbacks = design.plot?.setbacks;
+  // An irregular plot is checked against its real outline, not the bounding rectangle.
+  const irregular = design.plot?.polygon && setbacks
+    ? computeEnvelope({ plotWidth, plotDepth, totalArea: plotWidth * plotDepth, orientation: 'N', polygon: design.plot.polygon, roadEdges: design.plot.roadEdges, setbacks, allowPorchInSetback: false })
+    : null;
   for (const { room, type } of rooms) {
     const cell = cellById.get(room.id)!;
     const p = room.position;
@@ -140,6 +145,10 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
     }
     if (p.x < -0.05 || p.y < -0.05 || p.x + p.width > 100.05 || p.y + p.height > 100.05) {
       fail('geometry', 'OUT_OF_PLOT', `Room "${room.name}" extends beyond the plot boundary.`);
+    } else if (irregular) {
+      const r = cell.rect;
+      const snugged = { x: r.x + 0.3, y: r.y + 0.3, w: Math.max(0.1, r.w - 0.6), d: Math.max(0.1, r.d - 0.6) };
+      if (type !== 'void' && !irregular.fits(snugged)) fail('geometry', 'OUT_OF_ENVELOPE', `Room "${room.name}" extends outside the buildable part of the plot (the plot outline minus setbacks).`);
     } else if (setbacks) {
       const t = 0.3;
       const isSetbackAllowed = (type === 'parking' || type === 'entrance') && (design.plot?.allowPorchInSetback ?? (plotWidth * plotDepth <= 2000));
@@ -319,7 +328,7 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
 
   // ---------- 5. Feasibility ----------
   if (setbacks) {
-    const envelopeArea = (plotWidth - setbacks.left - setbacks.right) * (plotDepth - setbacks.front - setbacks.rear);
+    const envelopeArea = design.plot?.polygon && design.buildableAreaSqFt ? design.buildableAreaSqFt : (plotWidth - setbacks.left - setbacks.right) * (plotDepth - setbacks.front - setbacks.rear);
     const allowPorchInSetback = design.plot?.allowPorchInSetback ?? (plotWidth * plotDepth <= 2000);
     for (let level = 0; level < floorsCount; level++) {
       const used = cells.filter((cell) => cell.floor === level && cell.type !== 'void').reduce((sum, cell) => {

@@ -28,6 +28,10 @@ export interface SiteInfo {
   orientation: 'N' | 'S' | 'E' | 'W' | 'NE' | 'NW' | 'SE' | 'SW';
   setbacks?: SiteSetbacks;
   allowPorchInSetback?: boolean; // when true, car porch may sit within front setback (default true for plots <= 2000 sq ft)
+  /** Plot outline in feet with the main road along y = 0 (x across, y away from the road). Omit for a plain rectangle. */
+  polygon?: { x: number; y: number }[];
+  /** Indices of polygon edges that front a road (the first is the entrance side). Defaults to the edge(s) along y = 0. */
+  roadEdges?: number[];
   fileUrl?: string;
   notes?: string;
 }
@@ -263,6 +267,29 @@ export interface SpatialGraph {
   indoorOutdoorConnections: { roomId: string; outdoorSpaceId: string }[];
 }
 
+export interface PlannerAlternative {
+  id: string;
+  label: string;
+  summary: string;
+  engine: 'spatial-optimizer' | 'band-solver';
+  score: number;
+  /** One line on what this layout gives up or gains relative to the selected one. */
+  tradeoff: string;
+  selected: boolean;
+}
+
+export interface PlannerReport {
+  engine: 'spatial-optimizer' | 'band-solver';
+  archetype: string;
+  label: string;
+  summary: string;
+  score: number;
+  scoreParts: { key: string; label: string; weight: number; score: number; detail: string }[];
+  alternatives: PlannerAlternative[];
+  /** Why this layout was chosen, in plain language. */
+  rationale: string[];
+}
+
 export interface BuildingFootprint {
   shapeType: 'rectangular' | 'l_shaped' | 'courtyard_centered' | 'stepped' | 'winged' | 'compact';
   footprintAreaSqFt: number;
@@ -324,6 +351,9 @@ export interface StructuredDesignJSON {
     totalArea: number;
     orientation: string;
     roadSide: 'N' | 'S' | 'E' | 'W';
+    /** Plot outline (feet, road along y = 0) when the plot is not a plain rectangle. */
+    polygon?: { x: number; y: number }[];
+    roadEdges?: number[];
     setbacks?: SiteSetbacks;
     allowPorchInSetback?: boolean;
   };
@@ -347,6 +377,8 @@ export interface StructuredDesignJSON {
   designSignature?: DesignSignature;
   appearance?: HouseAppearance;
   generationMetadata?: DesignGenerationMetadata;
+  /** How the plan was produced and how it compares with the alternatives that were considered. */
+  planner?: PlannerReport;
   planExplanation?: {
     zoneRationale: string[];
     sizingRationale: string[];

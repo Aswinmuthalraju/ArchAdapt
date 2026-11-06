@@ -44,7 +44,7 @@ const STAIR_WIDTH = 7;
 const STAIR_MIN_DEPTH = 12;
 const MAX_BAND_DEPTH = 80;
 
-interface WorkRoom extends ProgramRoom {
+export interface WorkRoom extends ProgramRoom {
   area: number; // working area after any compression
   derived?: boolean;
   order: number;
@@ -56,7 +56,7 @@ interface Unit {
   anchor?: WorkRoom;
 }
 
-interface PlacedRoom {
+export interface PlacedRoom {
   room: WorkRoom;
   rect: Rect;
 }
@@ -1006,6 +1006,46 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     }
   }
 
+  return assembleDesign({
+    program, site, constraints, placed, originX, originY, notes, plotWidth, plotDepth, envWidth, envDepth, setbacks, allowPorchInSetback,
+    stairRect, footprintBounds: { width: footprintWidth, depth: depths.front + depths.middle + depths.rear }, hasCourtyard: courtyards.length > 0, compression
+  });
+}
+
+export interface AssembleInput {
+  program: DesignProgram;
+  site: SiteInfo;
+  constraints: DesignConstraints;
+  /** Rooms with rectangles measured from (originX, originY) in plot feet. */
+  placed: PlacedRoom[];
+  originX: number;
+  originY: number;
+  notes: string[];
+  plotWidth: number;
+  plotDepth: number;
+  envWidth: number;
+  envDepth: number;
+  setbacks: SiteSetbacks;
+  allowPorchInSetback: boolean;
+  stairRect: Rect | null;
+  footprintBounds: { width: number; depth: number };
+  hasCourtyard: boolean;
+  compression: number;
+  /** Area of the buildable region when it is not the plain rectangle envWidth x envDepth. */
+  buildableAreaOverride?: number;
+  plotPolygon?: { x: number; y: number }[];
+}
+
+/**
+ * Turns placed rooms (rectangles per floor) into the canonical design: doors, windows, walls, stairs,
+ * furniture cues and metadata. Shared by the band solver and the optimiser so both produce identical structure.
+ */
+export function assembleDesign(input: AssembleInput): LayoutSuccess {
+  const { program, site, constraints, placed, originX, originY, notes, plotWidth, plotDepth, envWidth, envDepth, setbacks, allowPorchInSetback, stairRect, footprintBounds, hasCourtyard, compression, buildableAreaOverride, plotPolygon } = input;
+  const floors = constraints.floors;
+  const multiStorey = floors > 1;
+  const lifeStage = constraints.modes.includes('life_stage');
+  const budgetFirst = constraints.modes.includes('budget_first');
   // ---- Canonical design object ----
   const cells: PlanCell[] = placed.map((p) => ({
     id: p.room.id,
@@ -1066,7 +1106,7 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
     builtUpAreaSqFt: rooms.filter((room) => room.position.floorLevel === level && enclosed(room)).reduce((sum, room) => sum + room.areaSqFt, 0)
   }));
 
-  const stairBase = stairRect as Rect | null;
+  const stairBase = stairRect;
   const stairs: StaircaseDetails[] = stairBase
     ? [{
         id: 'stair-1', location: `${program.stairSide === 'left' ? 'Left' : 'Right'} side of the circulation zone`, floorLevel: 0, topFloorLevel: floors - 1,
@@ -1074,10 +1114,11 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
       }]
     : [];
 
-  const buildingDepth = depths.front + depths.middle + depths.rear;
+  const footprintWidth = footprintBounds.width;
+  const buildingDepth = footprintBounds.depth;
   const steppedUpper = rooms.some((room) => room.roomType === 'terrace' && room.derived);
   const footprint: BuildingFootprint = {
-    shapeType: courtyards.length ? 'courtyard_centered' : steppedUpper ? 'stepped' : footprintWidth < envWidth - 1 || budgetFirst ? 'compact' : 'rectangular',
+    shapeType: hasCourtyard ? 'courtyard_centered' : steppedUpper ? 'stepped' : footprintWidth < envWidth - 1 || budgetFirst ? 'compact' : 'rectangular',
     footprintAreaSqFt: Math.round(footprintWidth * buildingDepth),
     boundingWidth: round2(footprintWidth),
     boundingDepth: round2(buildingDepth)
@@ -1123,9 +1164,10 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
       orientation: site.orientation,
       roadSide: (['N', 'S', 'E', 'W'].includes(site.orientation) ? site.orientation : site.orientation.charAt(0)) as 'N' | 'S' | 'E' | 'W',
       setbacks,
-      allowPorchInSetback
+      allowPorchInSetback,
+      ...(plotPolygon ? { polygon: plotPolygon, roadEdges: site.roadEdges } : {})
     },
-    buildableAreaSqFt: Math.round(envWidth * envDepth),
+    buildableAreaSqFt: buildableAreaOverride ?? Math.round(envWidth * envDepth),
     totalBuiltUpAreaSqFt: floorLevels.reduce((sum, level) => sum + level.builtUpAreaSqFt, 0),
     floorsCount: floors,
     floors: floorLevels,

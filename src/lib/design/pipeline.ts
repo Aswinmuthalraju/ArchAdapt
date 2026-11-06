@@ -11,7 +11,7 @@ import { callGeminiJson, geminiApiKey } from '@/lib/genai/gemini';
 import { buildLocalProgram } from '@/lib/genai/localPlanner';
 import { SYSTEM_ARCHITECTURAL_PROMPT, buildAlternativeProgramPrompt, buildProgramPrompt, ProgramPromptInput } from '@/lib/genai/prompts';
 import { getRelevantKnowledge } from '@/lib/genai/rag/architecturalKnowledge';
-import { layoutProgram } from './layoutEngine';
+import { PlanLayoutOptions, RankedPlan, planLayout } from './planner';
 import { buildConstraints, parseProgram, programFromDesign, validateProgramRequirements } from './program';
 import { validateFloorPlan } from './validateFloorPlan';
 import { StyleLevel, applyStyleMandates, checkStyleConformance, describeStyleAdditions, styleBlueprint } from './styleBlueprints';
@@ -34,6 +34,8 @@ export interface GenerationSuccess {
   notes: string[];
   /** Set when Gemini was requested but the local rule engine produced the design. Always shown to the user. */
   notice?: string;
+  /** Other complete layouts of the same programme, best first (the selected design is not repeated). */
+  alternatives?: StructuredDesignJSON[];
 }
 
 export interface GenerationFailure {
@@ -68,6 +70,22 @@ interface StageResult {
   /** Share by which room sizes were shrunk to fit (0 = target sizes kept). */
   compression?: number;
   infeasible?: { reason: string; violatedConstraints: string[] };
+  ranked?: RankedPlan[];
+}
+
+const baseConstraintsHot = (constraints: DesignConstraints, climateZone: string) =>
+  constraints.modes.includes('climate_adaptive') || /warm|hot|tropical/i.test(climateZone);
+
+/** The other layouts that were considered, ready to show the user. The selected one is not repeated. */
+function alternativesOf(stage: StageResult): StructuredDesignJSON[] {
+  if (!stage.design || !stage.ranked) return [];
+  return stage.ranked
+    .filter((r) => r.success.design !== stage.design && r.id !== stage.design?.planner?.archetype)
+    .map((r) => {
+      const design = r.success.design;
+      design.planner = { ...(stage.design!.planner!), engine: r.engine, archetype: r.id, label: r.label, summary: r.summary, score: r.quality.score, scoreParts: r.quality.parts };
+      return design;
+    });
 }
 
 const mirrorSides = (program: DesignProgram): DesignProgram => ({
@@ -129,15 +147,16 @@ export function buildPlanExplanation(
 }
 
 /** Programme → requirement check → geometry → full validation. Nothing reaches a renderer unless this passes. */
-export function realiseProgram(program: DesignProgram, site: SiteInfo, constraints: DesignConstraints): StageResult {
+export function realiseProgram(program: DesignProgram, site: SiteInfo, constraints: DesignConstraints, options: PlanLayoutOptions = {}): StageResult {
   const requirementErrors = validateProgramRequirements(program, constraints);
   if (requirementErrors.length) return { errors: requirementErrors, warnings: [], notes: [] };
 
-  const layout = layoutProgram(program, site, constraints);
+  const planned = planLayout(program, site, constraints, options);
+  const layout = planned.result;
   if (!layout.ok) return { errors: [layout.reason], warnings: [], notes: [], infeasible: { reason: layout.reason, violatedConstraints: layout.violatedConstraints } };
 
   const report = validateFloorPlan(layout.design);
-  return { design: report.isValid ? layout.design : undefined, errors: report.errors, warnings: report.warnings, notes: layout.notes, compression: layout.compression };
+  return { design: report.isValid ? layout.design : undefined, errors: report.errors, warnings: report.warnings, notes: layout.notes, compression: layout.compression, ranked: planned.ranked };
 }
 
 /**
@@ -171,14 +190,15 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
   // A planning variant that does not validate is skipped for the next one, so the user is not left with an error
   // when another arrangement of the same brief works.
   // Variants 0-2 are different strategies; 3-5 repeat them left-to-right mirrored, which resolves briefs whose wet rooms land on the wrong side.
+  const variantProgram = (candidate: DesignConstraints, n: number) => {
+    const program = buildLocalProgram(site, location, candidate, custom, n % 3);
+    return n < 3 ? program : mirrorSides(program);
+  };
   const solveBaseline = (candidate: DesignConstraints) => {
-    const variantFor = (n: number) => {
-      const program = buildLocalProgram(site, location, candidate, custom, n % 3);
-      return n < 3 ? program : mirrorSides(program);
-    };
-    let result = realiseProgram(variantFor(firstVariant), site, candidate);
+    const variantFor = (n: number) => variantProgram(candidate, n);
+    let result = realiseProgram(variantFor(firstVariant), site, candidate, { fast: true });
     for (let step = 1; step < 6 && !result.design && !result.infeasible; step++) {
-      const next = realiseProgram(variantFor((firstVariant + step) % 6), site, candidate);
+      const next = realiseProgram(variantFor((firstVariant + step) % 6), site, candidate, { fast: true });
       if (next.design || next.infeasible) result = next;
     }
     return result;
@@ -210,6 +230,28 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
       ? `Not every ${blueprint.label} room fits this plot, so only its defining space was kept.`
       : `This plot could not hold the rooms that define ${blueprint.label} style, so the plan follows your brief alone.`);
   }
+  // The band solver above only answers "does this brief fit at all". The spatial optimiser now plans the chosen
+  // programme properly, and may find a way where the band solver could not (narrow plots, odd proportions).
+  const climateZone = location.climateZone || '';
+  const planOptions: PlanLayoutOptions = {
+    hot: baseConstraintsHot(baseConstraints, climateZone),
+    seedOffset: input.alternativeTo ? conceptNumber : 0,
+    avoid: input.alternativeTo?.planner?.archetype ? [input.alternativeTo.planner.archetype] : []
+  };
+  const refineBaseline = () => {
+    const programForPlan = baseline.design?.program || variantProgram(constraints, firstVariant);
+    const stage = realiseProgram(programForPlan, site, constraints, planOptions);
+    if (stage.design) baseline = { ...stage, compression: stage.compression ?? baseline.compression };
+    else if (!baseline.design && stage.infeasible) baseline = { ...baseline, infeasible: stage.infeasible };
+  };
+  if (baseline.infeasible) {
+    const before = baseline.infeasible;
+    refineBaseline();
+    if (baseline.design) baseline.infeasible = undefined;
+    else if (!baseline.infeasible) baseline.infeasible = before;
+  } else if (baseline.design) {
+    refineBaseline();
+  }
   if (baseline.infeasible) {
     return { status: 'INFEASIBLE', reason: baseline.infeasible.reason, violatedConstraints: baseline.infeasible.violatedConstraints, attempts: 0, canUseLocalEngine: false };
   }
@@ -222,7 +264,7 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
     stamp(baseline.design, intent, 'local-rule-engine', 'local-rule-engine', 1, conceptNumber);
     onStage?.('validating', 'Validating structural stacking, circulation and setbacks...');
     baseline.design.planExplanation = buildPlanExplanation(baseline.design, constraints, site, { isValid: true, errors: [], warnings: baseline.warnings });
-    return { status: 'OK', design: baseline.design, engine: 'local-rule-engine', modelId: 'local-rule-engine', attempts: 1, warnings: [...styleNotes, ...baseline.warnings], notes: baseline.notes, notice };
+    return { status: 'OK', design: baseline.design, engine: 'local-rule-engine', modelId: 'local-rule-engine', attempts: 1, warnings: [...styleNotes, ...baseline.warnings], notes: baseline.notes, notice, alternatives: alternativesOf(baseline) };
   };
 
   if (input.engine === 'local') return runLocal();
@@ -286,13 +328,13 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
       continue;
     }
     onStage?.('laying_out', 'Synthesizing room geometry, walls, openings and staircase well...');
-    const stage = realiseProgram(parsed.program, site, constraints);
+    const stage = realiseProgram(parsed.program, site, constraints, planOptions);
     if (stage.design) {
       onStage?.('validating', 'Validating structural stacking, circulation and setbacks...');
       stamp(stage.design, intent, 'gemini', call.modelId, attempts, conceptNumber);
       stage.design.layoutNotes = [...parsed.notes, ...stage.notes];
       stage.design.planExplanation = buildPlanExplanation(stage.design, constraints, site, { isValid: true, errors: [], warnings: stage.warnings });
-      return { status: 'OK', design: stage.design, engine: 'gemini', modelId: call.modelId, attempts, warnings: [...styleNotes, ...stage.warnings], notes: stage.design.layoutNotes };
+      return { status: 'OK', design: stage.design, engine: 'gemini', modelId: call.modelId, attempts, warnings: [...styleNotes, ...stage.warnings], notes: stage.design.layoutNotes, alternatives: alternativesOf(stage) };
     }
     lastErrors = stage.errors;
     feedback = stage.errors;
