@@ -5,6 +5,9 @@ import { validateBriefInput } from '@/lib/design/inputValidation';
 import { buildableEnvelope } from '@/lib/design/layoutEngine';
 import { computeEnvelope } from '@/lib/design/planner/envelope';
 import { normalizeSite } from '@/lib/design/plotShapes';
+import { admitted, BusyError } from '@/lib/design/admission';
+
+export const maxDuration = 60;
 
 /**
  * Fast feasibility check that never calls the AI. It runs the same deterministic layout and validation the real
@@ -27,14 +30,14 @@ export async function POST(request: Request) {
   const envelope = buildableEnvelope(cleanSite);
   const irregular = cleanSite.polygon ? computeEnvelope(cleanSite) : null;
   try {
-    const outcome = await generateDesign({
+    const outcome = await admitted(() => generateDesign({
       site: cleanSite,
       location: location || { name: 'Site', city: 'Site', country: 'India', lat: 0, lng: 0 },
       requirements,
       preferences: { modes: preferences?.modes || [], primaryStyle: preferences?.primaryStyle || 'Modern' },
       engine: 'local',
       effort: 0.45
-    });
+    }));
     const envelopeInfo = irregular
       ? { width: Math.round(irregular.largest.w * 10) / 10, depth: Math.round(irregular.largest.d * 10) / 10, areaSqFt: Math.round(irregular.buildableArea), setbacks: irregular.setbacks }
       : { width: Math.round(envelope.width * 10) / 10, depth: Math.round(envelope.depth * 10) / 10, areaSqFt: Math.round(envelope.width * envelope.depth), setbacks: envelope.setbacks };
@@ -56,6 +59,7 @@ export async function POST(request: Request) {
       notes: [...outcome.warnings, ...outcome.notes].slice(0, 6)
     });
   } catch (err: any) {
+    if (err instanceof BusyError) return NextResponse.json({ ok: false, status: 'BUSY', problems: [err.message] }, { status: 503, headers: { 'Retry-After': String(err.retryAfterSeconds) } });
     return NextResponse.json({ ok: false, problems: [err?.message || 'The pre-check failed.'] }, { status: 500 });
   }
 }

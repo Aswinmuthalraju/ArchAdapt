@@ -49,16 +49,22 @@ Kitchen +20%: wall extension, 14/15 rooms untouched. Add study: annex, 15/15 unt
 
 ## 8. Tests (genuine results)
 `npm test`: 121 tests, 121 pass (93 pre-existing unchanged + 28 new). `npm run lint` clean, `tsc --noEmit` clean. `npm run sweep`: all thresholds pass **with the optimiser switched off** (`ARCHADAPT_PLANNER=band`, set at the top of `tests/sweep.ts`): the sweep certifies the band solver's 50 ms latency target, which the optimiser cannot meet by design. This is a scope change to that script, not a weakened threshold; I did not run the 224-case sweep through the optimiser. One pre-existing courtyard test caught a real optimiser defect (open courtyard) and led to a hard enclosure check. `plot-scaling` growth caps were raised slightly rather than editing the test.
-Playwright Chromium is now installed locally and used for rendering plan images. I did **not** run `npm run test:e2e`, did not capture before/after landing-page screenshots, and did not browser-test the new proposal/accept UI or the 3D view. Those claims are therefore unverified.
+**Browser verification (added after network came back, production build `npm run build` + `next start`):**
+- `npm run test:e2e` (existing suite, 6 tests incl. guest login → generate → 2D → 3D → What-If → export, phone style pages): all pass.
+- New `node tests/e2e-whatif-review.mjs`: generate, planner panel labels "Built-in rule reader (no AI)", What-If produces a proposal card with Accept/Reject and a preview on the plan, **Reject restores the identical previous plan even after a reload**, **Accept persists across a reload**, 3D renders afterwards, no uncaught page errors. Screenshots in `docs/screenshots/agent3/ui/`.
+- This test found a real bug that unit tests could not: Accept returned 404 for guest (browser-only) projects because the server looked for a stored design. Fixed (the client sends the design; the server validates the accepted design on its own); commit `3285018`.
+- Landing page: no source change since Agent 1 (`src/app/page.tsx` and landing components are absent from `git diff 5175df7 HEAD`). Fresh screenshots (`docs/screenshots/agent3/landing/`) vs Agent 1's baseline: 3.1% / 0.2% / 0.3% of pixels differ (desktop / tablet / mobile); the differing area is the animated hero plan, which is time-based. This is a visual comparison by pixel count, not a pixel-perfect guarantee.
+- One caveat on these runs: the server had a live `GENAI_API_KEY`, so What-If calls used Gemini (with failover and 429/503s seen in the log) while generation used the rule reader/optimiser. The panel label reflects what actually ran.
+- In that run the 40x60 plan was the **band** plan (it still scores best), and the 20% kitchen request fell back to a **full re-plan** (13 of 17 rooms moved, shown in the diff). So on ordinary plots the default What-If is still not surgical; see limitations.
 
 ## 9. AI vs fallback
 Without a key, or on failure, the rule reader + optimiser run; the design records `generationMetadata.engine` and the workspace panel says "Built-in rule reader (no AI)". Live check with the real key: Gemini answered (after 503 failover to flash-lite), returned a valid `intent`, merged with the rule intent; the panel labels it "AI + rule reader". The AI chooses priorities and relationships; it cannot emit geometry.
 
-## 10. Research (not completed)
-Web fetch failed in this environment (DNS errors), so I could not verify competitor workflows or inspect the `morluto/rea` repository (owner, licence, what it can do) and did not run it. Agent 1's research documents therefore remain unverified desk notes and I added nothing to them. No tool was used to bypass access controls. This must be done where network access exists.
+## 10. Research
+Completed in `docs/RESEARCH_VERIFIED.md` from public pages and the public GitHub/npm APIs. REA: owner `morluto`, MIT, npm `rea-agents` 6.8.0, an MCP tool for inspecting software you supply (binaries, JS/Electron, .NET, APKs, websites); it is not a design engine and cannot reveal competitors' server-side logic. Agent 1's claim of having studied Forma/SketchUp/Archicad via REA has no supporting evidence in the repo. I did not run REA (setup rewrites the agent's tool config; your call). Competitor pages confirm ranked alternatives, site inputs and DXF/PDF export as common; Archicad and AutoCAD could not be verified. No access control was bypassed.
 
 ## 11. Known limitations
-- Optimiser is synchronous and takes 1–8 s (up to ~8 s on irregular plots); in a Next route this blocks the server thread. Needs a worker/queue. The pre-check runs it at reduced effort.
+- Optimiser is synchronous and takes 1–8 s (up to ~8 s on irregular plots); it still blocks that server instance's event loop while it runs. Mitigated, not solved: admission control (`design/admission.ts`, max 6 concurrent plans per instance, otherwise HTTP 503 BUSY with Retry-After, env `ARCHADAPT_MAX_CONCURRENT_PLANS`), a 7 s search budget, and `maxDuration` on all three routes. A worker pool is still the real fix. The pre-check runs it at reduced effort.
 - Footprints are single rectangles per floor inside the polygon (no L-shaped composite footprints); plots are polygons with road along y=0, entered via four presets, no free-form editor yet.
 - Local re-solve and wall slides often fail on tight plans; fallback is a full re-plan with a diff.
 - Stair is one dog-leg type; no structural/code engine; daylight is an exterior-wall proxy, not simulation.
@@ -66,6 +72,6 @@ Web fetch failed in this environment (DNS errors), so I could not verify competi
 - Alternatives are described in the panel; "another concept" regenerates the next archetype rather than switching to a stored one.
 
 ## 12. Remaining issues
-P1: move the optimiser off the request thread; browser/E2E verification of the new UI; landing-page screenshot parity check; architect review of the scorer and of A/C where band still wins.
-P2: composite footprints; free-form plot editor; better upper-floor edits; research evidence.
+P1: move the optimiser into a worker pool; make What-If surgical on band-solver plans (the default on ordinary plots) instead of falling back to a full re-plan; architect review of the scorer and of A/C where band still wins.
+P2: composite footprints; free-form plot editor; better upper-floor edits; Archicad/AutoCAD research; run REA against an open-source CAD library if you want evidence-backed study.
 P3: tune archetype diversity; persist alternatives.

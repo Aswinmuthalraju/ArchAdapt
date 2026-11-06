@@ -4,6 +4,7 @@ import { generateDesign } from '@/lib/design/pipeline';
 import { countBedrooms, countRoomsOfType } from '@/lib/design/roomTypes';
 import { validateBriefInput } from '@/lib/design/inputValidation';
 import { normalizeSite } from '@/lib/design/plotShapes';
+import { admitted, BusyError } from '@/lib/design/admission';
 
 export const maxDuration = 180;
 
@@ -46,14 +47,14 @@ export async function POST(request: Request) {
           };
 
           try {
-            const outcome = await generateDesign({
+            const outcome = await admitted(() => generateDesign({
               site: normalizeSite(site),
               location: location || { name: 'Site', city: 'Site', country: 'India', lat: 0, lng: 0 },
               requirements,
               preferences: { ...preferences, modes: preferences.modes || [] },
               engine: engine === 'local' ? 'local' : 'auto',
               onStage: (stage, message) => send('stage', { stage, message })
-            });
+            }));
 
             if (outcome.status !== 'OK') {
               send('failure', {
@@ -90,7 +91,8 @@ export async function POST(request: Request) {
               });
             }
           } catch (err: any) {
-            send('error', { success: false, status: 'INTERNAL_ERROR', error: err?.message || 'Internal generation error' });
+            if (err instanceof BusyError) send('error', { success: false, status: 'BUSY', error: err.message, retryAfterSeconds: err.retryAfterSeconds });
+            else send('error', { success: false, status: 'INTERNAL_ERROR', error: err?.message || 'Internal generation error' });
           } finally {
             try { controller.close(); } catch { /* ignore */ }
           }
@@ -106,13 +108,13 @@ export async function POST(request: Request) {
       });
     }
 
-    const outcome = await generateDesign({
+    const outcome = await admitted(() => generateDesign({
       site: normalizeSite(site),
       location: location || { name: 'Site', city: 'Site', country: 'India', lat: 0, lng: 0 },
       requirements,
       preferences: { ...preferences, modes: preferences.modes || [] },
       engine: engine === 'local' ? 'local' : 'auto'
-    });
+    }));
 
     if (outcome.status !== 'OK') {
       if (DEV) console.warn(`[ARCHADAPT] GENERATION ${outcome.status} after ${outcome.attempts} attempt(s): ${outcome.reason}`, outcome.violatedConstraints);
@@ -158,6 +160,7 @@ export async function POST(request: Request) {
       }
     });
   } catch (err: any) {
+    if (err instanceof BusyError) return NextResponse.json({ success: false, status: 'BUSY', error: err.message }, { status: 503, headers: { 'Retry-After': String(err.retryAfterSeconds) } });
     console.error('[ARCHADAPT] GENERATION UNHANDLED ERROR:', err?.message || err);
     return NextResponse.json({ success: false, status: 'INTERNAL_ERROR', error: err?.message || 'Internal generation error' }, { status: 500 });
   }

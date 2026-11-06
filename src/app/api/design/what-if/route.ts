@@ -1,3 +1,4 @@
+import { admitted, BusyError } from '@/lib/design/admission';
 import { NextResponse } from 'next/server';
 import { DesignPreferences, DesignRequirements, LocationInfo, StructuredDesignJSON } from '@/types/architectural';
 import { classifyDesignRequestIntent } from '@/lib/design/requestIntent';
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
       modelId = accept.modelId || 'accepted-proposal';
       engine = accept.engine || 'accepted-proposal';
     } else if (intent === 'GENERATE_ALTERNATIVE_CONCEPT') {
-      const outcome = await generateDesign({ ...inputsFromDesign(currentDesign, location), alternativeTo: currentDesign });
+      const outcome = await admitted(() => generateDesign({ ...inputsFromDesign(currentDesign, location), alternativeTo: currentDesign }));
       if (outcome.status !== 'OK') {
         const explanation = outcome.reason;
         await logConversation(`${explanation}\n\n${outcome.violatedConstraints.map((c) => `• ${c}`).join('\n')}`, 'Alternative Concept Failed', null, { status: outcome.status, violatedConstraints: outcome.violatedConstraints });
@@ -163,7 +164,7 @@ export async function POST(request: Request) {
       warnings = outcome.warnings;
       notice = outcome.notice || null;
     } else {
-      const outcome = await runWhatIf(currentDesign, message);
+      const outcome = await admitted(() => runWhatIf(currentDesign, message));
       if (outcome.status === 'INPUT_REJECTED') {
         return NextResponse.json({ success: false, isFeasible: false, status: outcome.status, intent, explanation: outcome.reason, error: outcome.reason }, { status: 422 });
       }
@@ -260,6 +261,7 @@ export async function POST(request: Request) {
       validationWarnings: warnings
     });
   } catch (err: any) {
+    if (err instanceof BusyError) return NextResponse.json({ success: false, status: 'BUSY', error: err.message }, { status: 503, headers: { 'Retry-After': String(err.retryAfterSeconds) } });
     console.error('[ARCHADAPT What-If] UNHANDLED ERROR:', err?.message || err);
     return NextResponse.json({ success: false, status: 'INTERNAL_ERROR', error: err?.message || 'Internal What-If engine error' }, { status: 500 });
   }
