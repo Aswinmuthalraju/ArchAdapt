@@ -1,3 +1,6 @@
+// This sweep certifies the fast band solver (its 50 ms latency target and coverage thresholds). The optimiser has its own
+// benchmark (tests/tools/compare.ts) and tests (tests/planner.test.ts); its latency is seconds by design.
+process.env.ARCHADAPT_PLANNER ??= 'band';
 import { generateDesign } from '../src/lib/design/pipeline';
 import { validateFloorPlan } from '../src/lib/design/validateFloorPlan';
 import { ArchitecturalStyle } from '../src/types/architectural';

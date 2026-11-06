@@ -79,7 +79,8 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
   if (bandResult.ok && !options.anchors) {
     consider('band', 'Zoned bands', 'Living at the road, a circulation band in the middle with the stair, bedrooms behind. Reliable and economical.', 'band-solver', bandResult);
   }
-  if (!options.fast) {
+  // ARCHADAPT_PLANNER=band switches the optimiser off (feasibility sweeps, latency-critical deployments).
+  if (!options.fast && process.env.ARCHADAPT_PLANNER !== 'band') {
     const opt = optimizeLayouts(program, site, constraints, options);
     if (opt.ok) {
       for (const c of opt.candidates as PlanCandidate[]) {
