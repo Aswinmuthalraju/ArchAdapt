@@ -3,6 +3,7 @@ import { SiteInfo, LocationInfo, DesignRequirements, DesignPreferences } from '@
 import { generateDesign } from '@/lib/design/pipeline';
 import { countBedrooms, countRoomsOfType } from '@/lib/design/roomTypes';
 import { validateBriefInput } from '@/lib/design/inputValidation';
+import { normalizeSite } from '@/lib/design/plotShapes';
 
 export const maxDuration = 180;
 
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
 
           try {
             const outcome = await generateDesign({
-              site: { ...site, plotWidth: Number(site.plotWidth), plotDepth: Number(site.plotDepth) },
+              site: normalizeSite(site),
               location: location || { name: 'Site', city: 'Site', country: 'India', lat: 0, lng: 0 },
               requirements,
               preferences: { ...preferences, modes: preferences.modes || [] },
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
     }
 
     const outcome = await generateDesign({
-      site: { ...site, plotWidth: Number(site.plotWidth), plotDepth: Number(site.plotDepth) },
+      site: normalizeSite(site),
       location: location || { name: 'Site', city: 'Site', country: 'India', lat: 0, lng: 0 },
       requirements,
       preferences: { ...preferences, modes: preferences.modes || [] },

@@ -6,6 +6,8 @@ import { generateDesign } from '@/lib/design/pipeline';
 import { constraintsFromDesign } from '@/lib/design/program';
 import { runWhatIf, siteFromDesign } from '@/lib/design/whatIf';
 import { supabaseForRequest } from '@/lib/supabase/server';
+import { validateFloorPlan } from '@/lib/design/validateFloorPlan';
+import { EditDiff } from '@/lib/design/surgery';
 
 export const maxDuration = 180;
 
@@ -46,12 +48,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { projectId, currentVersionId, message, currentDesign: clientDesign, location } = body as {
+    const { projectId, currentVersionId, message, currentDesign: clientDesign, location, propose, accept } = body as {
       projectId: string;
       currentVersionId?: string;
       message: string;
       currentDesign?: StructuredDesignJSON;
       location?: LocationInfo;
+      /** Return the change for review instead of saving it. */
+      propose?: boolean;
+      /** A previously proposed change the client has accepted. It is re-validated here before it is saved. */
+      accept?: { design: StructuredDesignJSON; summary?: string; tradeOffs?: string[]; title?: string; intent?: string; engine?: string; modelId?: string };
     };
     if (!projectId || typeof message !== 'string' || !message.trim()) {
       return NextResponse.json({ success: false, status: 'BAD_REQUEST', error: 'Missing projectId or message parameter.' }, { status: 400 });
@@ -117,8 +123,24 @@ export async function POST(request: Request) {
     let warnings: string[] = [];
     let diversity: ReturnType<typeof evaluateConceptDiversity> | undefined;
     let notice: string | null = null;
+    let editInfo: { diff: EditDiff; strategy: string; quality?: { before: number; after: number }; surgeryNote?: string } | undefined;
 
-    if (intent === 'GENERATE_ALTERNATIVE_CONCEPT') {
+    if (accept) {
+      // The client reviewed a proposal and accepted it. Nothing is trusted: the design must pass the same validation as a fresh one.
+      if (!isDesign(accept.design)) {
+        return NextResponse.json({ success: false, status: 'BAD_REQUEST', error: 'The accepted design is missing or malformed.' }, { status: 400 });
+      }
+      const report = validateFloorPlan(accept.design);
+      if (!report.isValid) {
+        return NextResponse.json({ success: false, isFeasible: false, status: 'INVALID_DESIGN', intent, explanation: `The proposed design no longer passes validation: ${report.errors[0]}`, violatedConstraints: report.errors }, { status: 422 });
+      }
+      newDesign = accept.design;
+      summary = (accept.summary || message).slice(0, 400);
+      tradeOffs = Array.isArray(accept.tradeOffs) ? accept.tradeOffs.filter((t) => typeof t === 'string').slice(0, 12) : [];
+      title = (accept.title || summary).length > 90 ? `${(accept.title || summary).slice(0, 87)}…` : (accept.title || summary);
+      modelId = accept.modelId || 'accepted-proposal';
+      engine = accept.engine || 'accepted-proposal';
+    } else if (intent === 'GENERATE_ALTERNATIVE_CONCEPT') {
       const outcome = await generateDesign({ ...inputsFromDesign(currentDesign, location), alternativeTo: currentDesign });
       if (outcome.status !== 'OK') {
         const explanation = outcome.reason;
@@ -161,7 +183,29 @@ export async function POST(request: Request) {
       modelId = outcome.modelId;
       engine = outcome.engine;
       warnings = outcome.warnings;
+      editInfo = { diff: outcome.diff, strategy: outcome.strategy, quality: outcome.quality, surgeryNote: outcome.surgeryNote };
       if (outcome.engine === 'local-interpreter') notice = 'This request was interpreted by the built-in parser rather than the AI planner.';
+    }
+
+    // ---- 2b. Review first: the client sees what the change touches before anything is saved ----
+    if (propose && !accept) {
+      return NextResponse.json({
+        success: true,
+        isFeasible: true,
+        status: 'PROPOSED',
+        intent,
+        aiModel: modelId,
+        engine,
+        notice,
+        persisted: false,
+        title,
+        updatedDesign: newDesign,
+        summary,
+        tradeOffs,
+        diversity,
+        validationWarnings: warnings,
+        edit: editInfo
+      });
     }
 
     // ---- 3. Persist as a new version (the previous versions are never modified) ----

@@ -59,6 +59,8 @@ export interface GenerationInput {
   engine?: 'auto' | 'local';
   /** When set, the request is for a different concept from this design. */
   alternativeTo?: StructuredDesignJSON;
+  /** Scales the optimiser's search effort (the live pre-check uses less). */
+  effort?: number;
   /** Optional streaming stage callback */
   onStage?: (stage: GenerationStage, message: string) => void;
 }
@@ -240,6 +242,7 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
     intent: ruleIntent,
     hot: baseConstraintsHot(baseConstraints, climateZone),
     seedOffset: input.alternativeTo ? conceptNumber : 0,
+    effort: input.effort,
     avoid: input.alternativeTo?.planner?.archetype ? [input.alternativeTo.planner.archetype] : []
   };
   const refineBaseline = () => {

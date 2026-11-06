@@ -43,6 +43,8 @@ import { getUserProjectsFromSupabase, setCurrentVersionInSupabase } from '@/lib/
 import { validateFloorPlan } from '@/lib/design/validateFloorPlan';
 import { checkRenderConsistency } from '@/lib/geometry/buildHouseGeometry';
 import { countBedrooms, countRoomsOfType } from '@/lib/design/roomTypes';
+import ProposalCard, { Proposal } from '@/components/workspace/ProposalCard';
+import PlannerPanel from '@/components/workspace/PlannerPanel';
 
 const timeNow = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const isValidDesign = (design?: StructuredDesignJSON | null): design is StructuredDesignJSON => !!design && Array.isArray(design.rooms) && design.rooms.length > 0 && !!design.plot;
@@ -71,6 +73,7 @@ export default function WorkspacePage() {
   const [compareVersionA, setCompareVersionA] = useState<FloorPlanVersion | null>(null);
   const [chatMessages, setChatMessages] = useState<WhatIfMessage[]>([]);
   const [inputPrompt, setInputPrompt] = useState('');
+  const [proposal, setProposal] = useState<Proposal | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -204,7 +207,8 @@ export default function WorkspacePage() {
           currentVersionId: currentVersion.id,
           message: text,
           currentDesign: activeDesign,
-          location: project.location
+          location: project.location,
+          propose: true
         })
       });
 
@@ -230,6 +234,19 @@ export default function WorkspacePage() {
       const updatedDesign: StructuredDesignJSON = data.updatedDesign;
       if (!isValidDesign(updatedDesign)) {
         reply('The server answered without a usable design. Your design was not changed.');
+        return;
+      }
+
+      if (data.status === 'PROPOSED') {
+        // Review first: show the change on the plan, and save nothing until the client accepts.
+        setProposal({
+          design: updatedDesign, summary: data.summary, tradeOffs: data.tradeOffs || [], title: data.title, message: text, intent: data.intent,
+          engine: data.engine, aiModel: data.aiModel, notice: data.notice, warnings: data.validationWarnings || [], edit: data.edit
+        });
+        setSelectedRoomId(undefined);
+        setActiveTab((tab) => (tab === 'ask' ? '2d' : tab));
+        const diff = data.edit?.diff;
+        reply(`Here is the proposed change: ${data.summary}${diff ? `\n\n${diff.preserved} of ${diff.total} existing rooms are exactly where they were.` : ''}\n\nReview it on the plan, then accept or reject it. Nothing is saved yet.`);
         return;
       }
 
@@ -271,6 +288,55 @@ export default function WorkspacePage() {
     }
   };
 
+  /** Saves the proposal the client reviewed as a new version. The server re-validates it first. */
+  const acceptProposal = async () => {
+    if (!proposal || !currentVersion || !project || isProcessing) return;
+    const isLocal = project.storage !== 'supabase';
+    const localKey = isLocal ? project.id : undefined;
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/design/what-if', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({
+          projectId: project.id, currentVersionId: currentVersion.id, message: proposal.message, location: project.location,
+          accept: { design: proposal.design, summary: proposal.summary, tradeOffs: proposal.tradeOffs, title: proposal.title, intent: proposal.intent, engine: proposal.engine, modelId: proposal.aiModel }
+        })
+      });
+      let data: any = null;
+      try { data = await res.json(); } catch { /* handled below */ }
+      if (!data || !data.success) {
+        pushMessages([{ id: `assistant-${Date.now()}`, sender: 'assistant', content: `The change could not be saved: ${data?.explanation || data?.error || `HTTP ${res.status}`}. Your design was not changed.`, timestamp: timeNow() }], localKey);
+        return;
+      }
+      const versionNumber = data.versionNumber || Math.max(0, ...project.versions.map((v) => v.versionNumber)) + 1;
+      const newVersion: FloorPlanVersion = {
+        id: data.versionId || `v${versionNumber}`, projectId: project.id, versionNumber,
+        title: data.title || proposal.summary || `Version ${versionNumber}`, structuredDesign: proposal.design,
+        rationale: proposal.design.rationale || proposal.summary, tradeOffs: proposal.tradeOffs, parentVersionId: currentVersion.id,
+        createdByPrompt: proposal.message, createdAt: new Date().toISOString()
+      };
+      const updatedProject: Project = { ...project, currentVersionId: newVersion.id, versions: [...project.versions, newVersion], updatedAt: new Date().toISOString() };
+      setProject(updatedProject);
+      setCurrentVersion(newVersion);
+      setProposal(null);
+      if (isLocal) {
+        try { localStorage.setItem(`project_${project.id}`, JSON.stringify(updatedProject)); } catch { /* storage full */ }
+      }
+      pushMessages([{ id: `assistant-${Date.now()}`, sender: 'assistant', content: `Accepted and saved as version ${versionNumber}. The previous version is kept; you can go back to it from the version list.${!isLocal && !data.persisted ? ' It could not be saved to your account and is held in this tab only.' : ''}`, timestamp: timeNow(), versionIdResult: newVersion.id }], localKey);
+    } catch (err: any) {
+      pushMessages([{ id: `assistant-${Date.now()}`, sender: 'assistant', content: `The change could not be saved: ${err?.message || 'network error'}. Your design was not changed.`, timestamp: timeNow() }], localKey);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const rejectProposal = () => {
+    if (!proposal || !project) return;
+    setProposal(null);
+    pushMessages([{ id: `assistant-${Date.now()}`, sender: 'assistant', content: 'Rejected. Your design is exactly as it was.', timestamp: timeNow() }], project.storage !== 'supabase' ? project.id : undefined);
+  };
+
   /** Makes a version the active one, here and wherever the project is stored. */
   const activateVersion = async (version: FloorPlanVersion) => {
     setCurrentVersion(version);
@@ -310,6 +376,8 @@ export default function WorkspacePage() {
 
   const meta = activeDesign.generationMetadata;
   const engineLabel = !meta ? 'Legacy design' : meta.engine === 'gemini' ? `Gemini · ${meta.modelId}` : 'Built-in rule engine';
+  const shownDesign = proposal ? proposal.design : activeDesign;
+  const changeMap = proposal?.edit?.diff ? Object.fromEntries(proposal.edit.diff.rooms.filter((r) => r.kind === 'added' || r.kind === 'resized' || r.kind === 'moved').map((r) => [r.id, r.kind as 'added' | 'resized' | 'moved'])) : undefined;
   const bedroomCount = countBedrooms(activeDesign);
   const bathroomCount = countRoomsOfType(activeDesign, 'bathroom');
   const notes = activeDesign.layoutNotes || [];
@@ -352,6 +420,7 @@ export default function WorkspacePage() {
         Working out the change and re-checking the plan… {elapsed}s
       </div>
     )}
+    {proposal && <ProposalCard proposal={proposal} busy={isProcessing} onAccept={acceptProposal} onReject={rejectProposal} />}
     <div ref={chatEndRef} />
   </div>
 
@@ -441,6 +510,7 @@ export default function WorkspacePage() {
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="scrollbar-plum hidden w-80 shrink-0 flex-col overflow-y-auto border-r border-plum-700 bg-plum-850 lg:flex">
+          <PlannerPanel design={activeDesign} />
           <section className="space-y-2 border-b border-plum-700 p-5">
             <h2 className={heading}>This version</h2>
             <dl>
@@ -575,17 +645,27 @@ export default function WorkspacePage() {
 
         {/* Both views render the same canonical design object */}
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-plum-950">
+          {proposal && (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-gold-400/60 bg-plum-800 px-4 py-2 text-xs text-gold-100">
+              <span>Previewing a proposed change. Outlined rooms are the ones it touches. Nothing is saved yet.</span>
+              <span className="flex gap-2">
+                <button type="button" onClick={acceptProposal} disabled={isProcessing} className="border border-emerald-400/70 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">Accept</button>
+                <button type="button" onClick={rejectProposal} disabled={isProcessing} className="border border-plum-600 px-2.5 py-1 text-stone-200 hover:border-rose-400">Reject</button>
+              </span>
+            </div>
+          )}
           {activeTab === '2d' && (
             <FloorPlan2DRenderer
               sitePlanUrl={sitePlanUrl}
-              design={activeDesign}
+              design={shownDesign}
+              changes={changeMap}
               selectedRoomId={selectedRoomId}
               onRoomSelect={(room) => setSelectedRoomId(room && room.id !== selectedRoomId ? room.id : undefined)}
             />
           )}
           {activeTab === '3d' && (
             <Massing3DViewer
-              design={activeDesign}
+              design={shownDesign}
               selectedRoomId={selectedRoomId}
               onRoomSelect={(roomId) => setSelectedRoomId(roomId && roomId !== selectedRoomId ? roomId : undefined)}
             />

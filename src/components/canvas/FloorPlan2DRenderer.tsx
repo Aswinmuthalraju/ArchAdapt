@@ -9,6 +9,8 @@ import PlanSvg, { PLAN_CANVAS, plotFrame } from './PlanSvg';
 interface FloorPlan2DRendererProps {
   design: StructuredDesignJSON;
   selectedRoomId?: string;
+  /** Rooms a proposed change touches. */
+  changes?: Record<string, 'added' | 'resized' | 'moved'>;
   /** An uploaded site sketch, drawn under the house and stretched to the plot boundary. */
   sitePlanUrl?: string | null;
   onRoomSelect?: (room: FloorPlanRoom | null) => void;
@@ -18,7 +20,7 @@ const MIN_ZOOM = 0.6;
 const MAX_ZOOM = 4;
 
 /** The 2D view of the canonical design: toolbar, floor tabs, pan and zoom around the shared plan drawing. */
-export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSelect, sitePlanUrl }: FloorPlan2DRendererProps) {
+export default function FloorPlan2DRenderer({ design, selectedRoomId, changes, onRoomSelect, sitePlanUrl }: FloorPlan2DRendererProps) {
   const [showSketch, setShowSketch] = useState(true);
   const [sketchOpacity, setSketchOpacity] = useState(0.4);
   const frame = useMemo(() => plotFrame(design), [design]);
@@ -244,6 +246,7 @@ export default function FloorPlan2DRenderer({ design, selectedRoomId, onRoomSele
             floor={floor}
             theme="paper"
             selectedRoomId={selectedRoomId}
+            changes={changes}
             showAnnotations={showAnnotations}
             showFurniture={showFurniture}
             onRoomSelect={(room) => {

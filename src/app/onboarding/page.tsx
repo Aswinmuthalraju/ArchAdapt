@@ -11,6 +11,8 @@ import { createProjectInSupabase } from '@/lib/services/projectService';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { buildableEnvelope, defaultSetbacks } from '@/lib/design/layoutEngine';
+import { computeEnvelope, polygonArea } from '@/lib/design/planner/envelope';
+import { PLOT_SHAPES, PlotShape, normalizeSite, shapeGeometry } from '@/lib/design/plotShapes';
 import { styleBySlug } from '@/lib/styles/styleCatalog';
 import { saveSitePlan, shrinkImage } from '@/lib/siteplan/sitePlanStore';
 
@@ -72,6 +74,7 @@ export default function OnboardingPage() {
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string; previewUrl: string } | null>(null);
   const [siteInfo, setSiteInfo] = useState<SiteInfo>({ plotWidth: 40, plotDepth: 60, totalArea: 2400, orientation: 'E' });
   const [customSetbacks, setCustomSetbacks] = useState<SiteSetbacks | null>(null);
+  const [plotShape, setPlotShape] = useState<PlotShape>('rectangle');
   const [locationInfo, setLocationInfo] = useState<LocationInfo>({ name: 'Kochi Site Plot', city: 'Kochi', country: 'India', lat: 9.9312, lng: 76.2673, climateZone: 'Warm & Humid' });
   const [dimensionError, setDimensionError] = useState<string | null>(null);
 
@@ -91,7 +94,13 @@ export default function OnboardingPage() {
   const effectiveSite: SiteInfo = useMemo(() => ({ ...siteInfo, ...(isArchitect && customSetbacks ? { setbacks: customSetbacks } : {}) }), [siteInfo, customSetbacks, isArchitect]);
   const envelope = useMemo(() => {
     if (!(siteInfo.plotWidth > 0) || !(siteInfo.plotDepth > 0)) return null;
-    return buildableEnvelope(effectiveSite);
+    if (effectiveSite.polygon) {
+      // An irregular plot: the buildable region is what is left of the real outline after setbacks, not a rectangle.
+      const real = computeEnvelope(normalizeSite(effectiveSite));
+      return { width: real.largest.w, depth: real.largest.d, areaSqFt: real.buildableArea, setbacks: real.setbacks, allowPorchInSetback: real.allowPorchInSetback };
+    }
+    const rect = buildableEnvelope(effectiveSite);
+    return { ...rect, areaSqFt: rect.width * rect.depth };
   }, [effectiveSite, siteInfo.plotWidth, siteInfo.plotDepth]);
 
   const preferences = useMemo(() => ({ modes: selectedModes, primaryStyle, ...(isArchitect && secondaryStyle ? { secondaryStyle } : {}) }), [selectedModes, primaryStyle, secondaryStyle, isArchitect]);
@@ -148,9 +157,11 @@ export default function OnboardingPage() {
     }
   };
 
-  const setPlot = (patch: Partial<Pick<SiteInfo, 'plotWidth' | 'plotDepth'>>) => {
+  const setPlot = (patch: Partial<Pick<SiteInfo, 'plotWidth' | 'plotDepth'>>, shape: PlotShape = plotShape) => {
     const next = { ...siteInfo, ...patch };
-    setSiteInfo({ ...next, totalArea: Math.round(next.plotWidth * next.plotDepth) });
+    const { polygon, roadEdges } = shapeGeometry(shape, next.plotWidth, next.plotDepth);
+    const area = polygon ? polygonArea(polygon) : next.plotWidth * next.plotDepth;
+    setSiteInfo({ ...next, polygon, roadEdges, totalArea: Math.round(area) });
     setDimensionError(null);
   };
 
@@ -353,6 +364,21 @@ export default function OnboardingPage() {
                   {[['E', 'East'], ['N', 'North'], ['W', 'West'], ['S', 'South'], ['NE', 'North-East'], ['NW', 'North-West'], ['SE', 'South-East'], ['SW', 'South-West']].map(([v, l]) => <option key={v} value={v}>{l} side</option>)}
                 </select>
               </div>
+              <div className="sm:col-span-3">
+                <label className={labelClass} htmlFor="plot-shape">Plot shape</label>
+                <div className="flex flex-wrap items-center gap-4">
+                  <select id="plot-shape" value={plotShape} onChange={(e) => { const shape = e.target.value as PlotShape; setPlotShape(shape); setPlot({}, shape); }} className={`${fieldClass} sm:max-w-sm`}>
+                    {PLOT_SHAPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                  {siteInfo.polygon && (
+                    <svg viewBox={`-4 -4 ${siteInfo.plotWidth + 8} ${siteInfo.plotDepth + 8}`} className="h-20 w-auto border border-stone-200 bg-[#FBF8F4]" role="img" aria-label={`Plot outline preview, ${PLOT_SHAPES.find((s) => s.id === plotShape)?.label}`}>
+                      <polygon points={siteInfo.polygon.map((q) => `${q.x},${q.y}`).join(' ')} fill="rgba(180,150,90,0.18)" stroke="#8a6d2f" strokeWidth={Math.max(siteInfo.plotWidth, siteInfo.plotDepth) / 60} />
+                      <line x1="0" y1="0" x2={siteInfo.plotWidth} y2="0" stroke="#444" strokeWidth={Math.max(siteInfo.plotWidth, siteInfo.plotDepth) / 22} />
+                    </svg>
+                  )}
+                  <p className="max-w-md text-[11px] text-stone-500">{PLOT_SHAPES.find((s) => s.id === plotShape)?.hint} The house is planned inside the real outline after setbacks, never in a rectangle that merely contains it.</p>
+                </div>
+              </div>
               <div>
                 <label className={labelClass} htmlFor="city">City / region</label>
                 <input id="city" type="text" value={locationInfo.city} onChange={(e) => setLocationInfo({ ...locationInfo, city: e.target.value, name: `${e.target.value} Site Plot` })} className={fieldClass} />
@@ -371,7 +397,7 @@ export default function OnboardingPage() {
                 <div className="w-full border border-stone-200 bg-[#FBF8F4] px-4 py-3 text-xs text-stone-700" aria-live="polite">
                   <div className="flex items-center gap-2 font-semibold text-stone-900"><Ruler className="h-3.5 w-3.5 text-magenta-500" /> Buildable area</div>
                   {envelope && envelope.width > 0 && envelope.depth > 0
-                    ? <div className="mt-1">{Math.round(envelope.width)} × {Math.round(envelope.depth)} ft ≈ {Math.round(envelope.width * envelope.depth).toLocaleString()} sq ft per floor</div>
+                    ? <div className="mt-1">{siteInfo.polygon ? `Largest rectangle ${Math.round(envelope.width)} × ${Math.round(envelope.depth)} ft; ` : `${Math.round(envelope.width)} × ${Math.round(envelope.depth)} ft ≈ `}{Math.round(envelope.areaSqFt).toLocaleString()} sq ft buildable per floor</div>
                     : <div className="mt-1 text-red-600">Enter a valid plot</div>}
                 </div>
               </div>

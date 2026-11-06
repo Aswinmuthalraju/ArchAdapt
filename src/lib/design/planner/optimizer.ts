@@ -3,7 +3,7 @@ import {
 } from '@/types/architectural';
 import { PlacedRoom, WorkRoom, LayoutFailure, assembleDesign } from '@/lib/design/layoutEngine';
 import { ROOM_TYPE_SPECS, floorName, isBedroomType } from '@/lib/design/roomTypes';
-import { Rect, planCompass, sharedEdge } from '@/lib/geometry/planGeometry';
+import { OPEN_TYPES, Rect, designCells, planCompass, sharedEdge } from '@/lib/geometry/planGeometry';
 import { Envelope, computeEnvelope } from './envelope';
 import { validateFloorPlan } from '@/lib/design/validateFloorPlan';
 import { HARD_TERMS, layoutEnergy } from './energy';
@@ -443,13 +443,26 @@ function sizeProgram(plan: Plan, env: Envelope, constraints: DesignConstraints, 
   return { ok: true };
 }
 
+/** A courtyard must be closed by walled rooms on all four sides; one that meets an outside wall is a gap, not a courtyard. */
+function courtyardOpenSide(design: StructuredDesignJSON): string | null {
+  const cells = designCells(design).filter((c) => c.floor === 0);
+  for (const court of cells.filter((c) => c.type === 'courtyard')) {
+    const solid = cells.filter((c) => c !== court && !OPEN_TYPES.includes(c.type));
+    const { x, y, w, d } = court.rect;
+    const closed = (orientation: 'horizontal' | 'vertical', at: number, length: number) =>
+      sum(solid.map((c) => { const e = sharedEdge(court.rect, c.rect); return e && e.orientation === orientation && Math.abs(e.at - at) < 0.1 ? e.length : 0; })) / length;
+    if ([closed('horizontal', y, w), closed('horizontal', y + d, w), closed('vertical', x, d), closed('vertical', x + w, d)].some((share) => share < 0.85)) return 'the courtyard is not enclosed by rooms on all four sides';
+  }
+  return null;
+}
+
 export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constraints: DesignConstraints, opts: OptimizeOptions = {}): OptimizeResult {
   const effort = opts.effort ?? 1;
   const floors = constraints.floors;
   const plotWidth = Number(site.plotWidth);
   const plotDepth = Number(site.plotDepth);
   const env = computeEnvelope(site);
-  if (env.largest.w < 14 || env.largest.d < 18) {
+  if (Math.min(env.largest.w, env.largest.d) < 14 || env.largest.w * env.largest.d < 330) {
     return { ok: false, reason: `After setbacks the buildable area is only ${Math.round(env.largest.w)}' x ${Math.round(env.largest.d)}', which is too small for a house.`, violatedConstraints: ['Buildable envelope'] };
   }
   const plotArea = env.rectangular ? plotWidth * plotDepth : Math.round(env.plot.reduce((s, p, i) => { const q = env.plot[(i + 1) % env.plot.length]; return s + (p.x * q.y - q.x * p.y); }, 0) / 2);
@@ -627,6 +640,8 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
       if (out.skip) { rejected.push(out.skip); break; }
       if (!out.cand) continue;
       const check = validateFloorPlan(out.cand.design);
+      const open = courtyardOpenSide(out.cand.design);
+      if (open) { rejected.push(`${arch.label} (try ${attempt + 1}): ${open}`); continue; }
       if (check.isValid && out.cand.unreachable.length === 0) accepted = out.cand;
       else rejected.push(`${arch.label} (try ${attempt + 1}): ${check.errors[0] || `unreachable ${out.cand.unreachable.join(', ')}`}`);
     }

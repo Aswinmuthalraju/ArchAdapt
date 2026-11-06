@@ -112,6 +112,8 @@ interface PlanSvgProps {
   floor: number;
   theme?: PlanTheme;
   selectedRoomId?: string;
+  /** Rooms touched by a proposed change, outlined so the client can see what an edit does. */
+  changes?: Record<string, 'added' | 'resized' | 'moved'>;
   onRoomSelect?: (room: FloorPlanRoom) => void;
   showAnnotations?: boolean;
   showFurniture?: boolean;
@@ -126,7 +128,7 @@ interface PlanSvgProps {
  * Pure drawing of one floor of the canonical design. Every mark comes from design.rooms, design.walls,
  * design.openings and design.stairs; nothing here invents or adjusts geometry.
  */
-export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId, onRoomSelect, showAnnotations = true, showFurniture = true, showSite = true, crop = false, className }: PlanSvgProps) {
+export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId, changes, onRoomSelect, showAnnotations = true, showFurniture = true, showSite = true, crop = false, className }: PlanSvgProps) {
   const palette = PALETTES[theme];
   const uid = useId().replace(/:/g, '');
   const plotWidth = design.plot?.width || 40;
@@ -258,10 +260,18 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
           <text x={PLAN_CANVAS / 2} y={offsetY - 22} textAnchor="middle" fill={palette.roadText} fontSize="11.5" fontWeight="600" fontFamily="var(--font-sans), sans-serif" letterSpacing="0.4">
             Road · plot faces {orientation}
           </text>
-          <rect x={offsetX} y={offsetY} width={plotWidth * scale} height={plotDepth * scale} fill={palette.plot} stroke={palette.plotLine} strokeWidth="1.4" strokeDasharray="9 5" />
+          {design.plot?.polygon && design.plot.polygon.length >= 3 ? (
+            <polygon
+              points={design.plot.polygon.map((p) => `${fx(p.x)},${fy(p.y)}`).join(' ')}
+              fill={palette.plot} stroke={palette.plotLine} strokeWidth="1.4" strokeDasharray="9 5"
+              aria-label="Plot outline"
+            />
+          ) : (
+            <rect x={offsetX} y={offsetY} width={plotWidth * scale} height={plotDepth * scale} fill={palette.plot} stroke={palette.plotLine} strokeWidth="1.4" strokeDasharray="9 5" />
+          )}
 
           {/* Driveway and landscaped yard on larger plots */}
-          {plotWidth * plotDepth >= 2500 && (
+          {plotWidth * plotDepth >= 2500 && !design.plot?.polygon && (
             <g pointerEvents="none" opacity="0.6">
               {setbacks && setbacks.rear > 4 && (
                 <rect
@@ -291,7 +301,7 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
             </g>
           )}
 
-          {setbacks && (
+          {setbacks && !design.plot?.polygon && (
             <rect
               x={fx(setbacks.left)}
               y={fy(setbacks.front)}
@@ -413,6 +423,18 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
       </g>
 
       {openings.map(renderOpening)}
+
+      {/* Rooms a proposed change touches */}
+      {changes && rooms.filter((room) => changes[room.id]).map((room) => {
+        const kind = changes[room.id];
+        const colour = kind === 'added' ? '#2E7D32' : '#C77700';
+        return (
+          <g key={`chg-${room.id}`} pointerEvents="none">
+            <rect x={px(room.position.x) + 2} y={py(room.position.y) + 2} width={Math.max(0, pw(room.position.width) - 4)} height={Math.max(0, ph(room.position.height) - 4)} fill={kind === 'added' ? 'rgba(46,125,50,0.10)' : 'rgba(199,119,0,0.10)'} stroke={colour} strokeWidth="2" strokeDasharray="6 3" />
+            <text x={px(room.position.x) + 6} y={py(room.position.y) + 13} fontSize="9.5" fontWeight="700" fill={colour} fontFamily="var(--font-sans), sans-serif" letterSpacing="0.6">{kind.toUpperCase()}</text>
+          </g>
+        );
+      })}
 
       {/* Selection outline with architectural corner brackets */}
       {rooms.filter((room) => room.id === selectedRoomId).map((room) => {

@@ -3,6 +3,8 @@ import { DesignPreferences, DesignRequirements, LocationInfo, SiteInfo } from '@
 import { generateDesign } from '@/lib/design/pipeline';
 import { validateBriefInput } from '@/lib/design/inputValidation';
 import { buildableEnvelope } from '@/lib/design/layoutEngine';
+import { computeEnvelope } from '@/lib/design/planner/envelope';
+import { normalizeSite } from '@/lib/design/plotShapes';
 
 /**
  * Fast feasibility check that never calls the AI. It runs the same deterministic layout and validation the real
@@ -21,17 +23,21 @@ export async function POST(request: Request) {
   const problems = validateBriefInput(site, requirements);
   if (problems.length) return NextResponse.json({ ok: false, feasible: false, problems });
 
-  const cleanSite = { ...site, plotWidth: Number(site.plotWidth), plotDepth: Number(site.plotDepth) };
+  const cleanSite = normalizeSite(site);
   const envelope = buildableEnvelope(cleanSite);
+  const irregular = cleanSite.polygon ? computeEnvelope(cleanSite) : null;
   try {
     const outcome = await generateDesign({
       site: cleanSite,
       location: location || { name: 'Site', city: 'Site', country: 'India', lat: 0, lng: 0 },
       requirements,
       preferences: { modes: preferences?.modes || [], primaryStyle: preferences?.primaryStyle || 'Modern' },
-      engine: 'local'
+      engine: 'local',
+      effort: 0.45
     });
-    const envelopeInfo = { width: Math.round(envelope.width * 10) / 10, depth: Math.round(envelope.depth * 10) / 10, areaSqFt: Math.round(envelope.width * envelope.depth), setbacks: envelope.setbacks };
+    const envelopeInfo = irregular
+      ? { width: Math.round(irregular.largest.w * 10) / 10, depth: Math.round(irregular.largest.d * 10) / 10, areaSqFt: Math.round(irregular.buildableArea), setbacks: irregular.setbacks }
+      : { width: Math.round(envelope.width * 10) / 10, depth: Math.round(envelope.depth * 10) / 10, areaSqFt: Math.round(envelope.width * envelope.depth), setbacks: envelope.setbacks };
     if (outcome.status !== 'OK') {
       return NextResponse.json({ ok: true, feasible: false, problems: [], reason: outcome.reason, violatedConstraints: outcome.violatedConstraints, envelope: envelopeInfo });
     }

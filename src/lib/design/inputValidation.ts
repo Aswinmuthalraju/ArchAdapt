@@ -1,5 +1,7 @@
 import { DesignRequirements, SiteInfo } from '@/types/architectural';
 import { buildableEnvelope } from './layoutEngine';
+import { computeEnvelope, validatePolygon } from './planner/envelope';
+import { normalizeSite } from './plotShapes';
 
 const ORIENTATIONS = ['N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW'];
 
@@ -19,6 +21,18 @@ export function validateBriefInput(site: SiteInfo, requirements: DesignRequireme
   if (!inRange(Number(requirements?.floors), 1, 4)) problems.push('Floors must be between 1 and 4.');
   if (!requirements?.spaces || typeof requirements.spaces !== 'object') problems.push('Requested spaces are missing.');
   if (problems.length) return problems;
+
+  if (site.polygon) {
+    const bad = validatePolygon(site.polygon);
+    if (bad) return [bad];
+    if (site.polygon.length > 24) return ['A plot outline may have at most 24 corners.'];
+    if (site.roadEdges && !site.roadEdges.every((i) => Number.isInteger(i) && i >= 0 && i < site.polygon!.length)) return ['A road edge refers to a boundary that does not exist.'];
+    const clean = normalizeSite(site);
+    if (!inRange(clean.plotWidth, 10, 1000) || !inRange(clean.plotDepth, 10, 1000)) return ['The plot outline must be between 10 and 1000 ft in each direction.'];
+    const env = computeEnvelope(clean);
+    if (Math.min(env.largest.w, env.largest.d) < 14 || env.largest.w * env.largest.d < 330) return [`After setbacks the largest buildable rectangle on this outline is only ${Math.round(env.largest.w)} x ${Math.round(env.largest.d)} ft, which is too small for a house.`];
+    return [];
+  }
 
   const sb = site.setbacks;
   if (sb) {
