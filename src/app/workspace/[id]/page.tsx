@@ -299,7 +299,7 @@ export default function WorkspacePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({
-          projectId: project.id, currentVersionId: currentVersion.id, message: proposal.message, location: project.location,
+          projectId: project.id, currentVersionId: currentVersion.id, message: proposal.message, location: project.location, currentDesign: activeDesign,
           accept: { design: proposal.design, summary: proposal.summary, tradeOffs: proposal.tradeOffs, title: proposal.title, intent: proposal.intent, engine: proposal.engine, modelId: proposal.aiModel }
         })
       });

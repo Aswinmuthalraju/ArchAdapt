@@ -96,6 +96,8 @@ export async function POST(request: Request) {
     }
     // Guest / offline projects live in the browser, so the browser supplies the design it is showing.
     if (!currentDesign && isDesign(clientDesign)) currentDesign = clientDesign;
+    // An accepted proposal carries the design it replaces; it is validated on its own below, so the base is only needed for the other paths.
+    if (!currentDesign && accept && isDesign(accept.design)) currentDesign = accept.design;
     if (!currentDesign) {
       return NextResponse.json(
         { success: false, status: 'DESIGN_NOT_FOUND', error: 'The design to modify could not be found. Reload the project and try again.' },
