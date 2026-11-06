@@ -164,6 +164,7 @@ export default function WorkspacePage() {
   }, [activeDesign]);
 
   const analysis = useMemo(() => (activeDesign ? analyseDesign(activeDesign, limits) : null), [activeDesign, limits]);
+  const selectedRoomObj = useMemo(() => activeDesign?.rooms.find((r) => r.id === selectedRoomId), [activeDesign, selectedRoomId]);
 
   const pushMessages = (messages: WhatIfMessage[], localProjectId?: string) => {
     setChatMessages((prev) => {
@@ -175,14 +176,14 @@ export default function WorkspacePage() {
     });
   };
 
-  const handleWhatIfSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = inputPrompt.trim();
+  const handleWhatIfSubmit = async (e?: React.FormEvent, customPrompt?: string) => {
+    if (e) e.preventDefault();
+    const text = (customPrompt || inputPrompt).trim();
     if (!text || !currentVersion || !project || !activeDesign || isProcessing) return;
 
     const isLocal = project.storage !== 'supabase';
     const localKey = isLocal ? project.id : undefined;
-    setInputPrompt('');
+    if (!customPrompt) setInputPrompt('');
     pushMessages([{ id: `user-${Date.now()}`, sender: 'user', content: text, timestamp: timeNow() }], localKey);
     setIsProcessing(true);
     setElapsed(0);
@@ -574,12 +575,74 @@ export default function WorkspacePage() {
 
         {/* Both views render the same canonical design object */}
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-plum-950">
-          {activeTab === '2d' && <FloorPlan2DRenderer sitePlanUrl={sitePlanUrl} design={activeDesign} selectedRoomId={selectedRoomId} onRoomSelect={(room) => setSelectedRoomId(room && room.id !== selectedRoomId ? room.id : undefined)} />}
-          {activeTab === '3d' && <Massing3DViewer design={activeDesign} />}
+          {activeTab === '2d' && (
+            <FloorPlan2DRenderer
+              sitePlanUrl={sitePlanUrl}
+              design={activeDesign}
+              selectedRoomId={selectedRoomId}
+              onRoomSelect={(room) => setSelectedRoomId(room && room.id !== selectedRoomId ? room.id : undefined)}
+            />
+          )}
+          {activeTab === '3d' && (
+            <Massing3DViewer
+              design={activeDesign}
+              selectedRoomId={selectedRoomId}
+              onRoomSelect={(roomId) => setSelectedRoomId(roomId && roomId !== selectedRoomId ? roomId : undefined)}
+            />
+          )}
           {activeTab === 'sheet' && analysis && (
             <DrawingSetPanel analysis={analysis} limits={limits} onLimitsChange={updateLimits} onRoomSelect={(id) => { setSelectedRoomId(id); setActiveTab('2d'); }} />
           )}
           {activeTab === 'ask' && <div className="flex h-full flex-col bg-plum-850">{chat}</div>}
+
+          {/* Contextual Room Action Bar when a room is selected in 2D or 3D */}
+          {selectedRoomObj && (activeTab === '2d' || activeTab === '3d') && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex max-w-[95vw] flex-wrap items-center justify-between gap-3 rounded-lg border border-gold-400/80 bg-plum-900/95 px-4 py-2.5 shadow-2xl backdrop-blur text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
+              <div className="flex items-center gap-2 border-r border-plum-700 pr-3">
+                <span className="h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
+                <span className="font-serif font-semibold text-stone-100 text-sm whitespace-nowrap">{selectedRoomObj.name}</span>
+                <span className="text-stone-400 font-mono">({selectedRoomObj.dimensions})</span>
+              </div>
+              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => handleWhatIfSubmit(undefined, `Make ${selectedRoomObj.name} 15% larger`)}
+                  className="rounded border border-plum-600 bg-plum-800 px-2.5 py-1 text-stone-200 hover:border-gold-400 hover:text-gold-200 transition-colors disabled:opacity-50"
+                  title="Enlarge this room by 15%"
+                >
+                  +15% Size
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => handleWhatIfSubmit(undefined, `Make ${selectedRoomObj.name} 15% smaller`)}
+                  className="rounded border border-plum-600 bg-plum-800 px-2.5 py-1 text-stone-200 hover:border-gold-400 hover:text-gold-200 transition-colors disabled:opacity-50"
+                  title="Reduce this room by 15%"
+                >
+                  -15% Size
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputPrompt(`Make ${selectedRoomObj.name} `);
+                    setActiveTab('ask');
+                  }}
+                  className="rounded border border-gold-400/60 bg-gold-400/15 px-2.5 py-1 text-gold-200 hover:bg-gold-400/25 transition-colors"
+                >
+                  Ask to modify…
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRoomId(undefined)}
+                  className="rounded p-1 text-stone-400 hover:text-stone-100 transition-colors ml-1"
+                  title="Deselect"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
         </main>
 
         {activeTab !== 'ask' && <aside className="hidden w-96 shrink-0 flex-col border-l border-plum-700 bg-plum-850 xl:flex">{chat}</aside>}

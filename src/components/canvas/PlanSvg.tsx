@@ -414,10 +414,23 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
 
       {openings.map(renderOpening)}
 
-      {/* Selection outline above the walls */}
-      {rooms.filter((room) => room.id === selectedRoomId).map((room) => (
-        <rect key={room.id} x={px(room.position.x) + 1.5} y={py(room.position.y) + 1.5} width={pw(room.position.width) - 3} height={ph(room.position.height) - 3} fill="none" stroke={palette.select} strokeWidth="2.2" pointerEvents="none" />
-      ))}
+      {/* Selection outline with architectural corner brackets */}
+      {rooms.filter((room) => room.id === selectedRoomId).map((room) => {
+        const rx = px(room.position.x) + 1;
+        const ry = py(room.position.y) + 1;
+        const rw = pw(room.position.width) - 2;
+        const rh = ph(room.position.height) - 2;
+        const bl = Math.min(8, Math.min(rw, rh) / 4);
+        return (
+          <g key={`sel-${room.id}`} pointerEvents="none">
+            <rect x={rx} y={ry} width={rw} height={rh} fill={theme === 'paper' ? 'rgba(212,175,55,0.12)' : 'rgba(212,175,55,0.2)'} stroke={palette.select} strokeWidth="2.2" strokeDasharray="5 3" />
+            <path d={`M ${rx} ${ry + bl} L ${rx} ${ry} L ${rx + bl} ${ry}`} fill="none" stroke={palette.select} strokeWidth="2.8" />
+            <path d={`M ${rx + rw - bl} ${ry} L ${rx + rw} ${ry} L ${rx + rw} ${ry + bl}`} fill="none" stroke={palette.select} strokeWidth="2.8" />
+            <path d={`M ${rx} ${ry + rh - bl} L ${rx} ${ry + rh} L ${rx + bl} ${ry + rh}`} fill="none" stroke={palette.select} strokeWidth="2.8" />
+            <path d={`M ${rx + rw - bl} ${ry + rh} L ${rx + rw} ${ry + rh} L ${rx + rw} ${ry + rh - bl}`} fill="none" stroke={palette.select} strokeWidth="2.8" />
+          </g>
+        );
+      })}
 
       {/* Room labels */}
       {rooms.map((room) => {
@@ -448,9 +461,16 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
               ))}
             </text>
             {withDims && (
-              <text x={rx + rw / 2} y={top + shown.length * fontSize * 1.15 + 2} fill={palette.muted} fontSize="9.5" stroke={palette.gap} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke" strokeOpacity="0.9">
-                {room.dimensions}
-              </text>
+              <>
+                <text x={rx + rw / 2} y={top + shown.length * fontSize * 1.15 + 2} fill={palette.muted} fontSize="9.5" stroke={palette.gap} strokeWidth="3" strokeLinejoin="round" paintOrder="stroke" strokeOpacity="0.9">
+                  {room.dimensions}
+                </text>
+                {rw >= 82 && rh >= 54 && (
+                  <text x={rx + rw / 2} y={top + shown.length * fontSize * 1.15 + 13} fill={palette.muted} fontSize="8" opacity="0.85" stroke={palette.gap} strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke" strokeOpacity="0.9">
+                    {Math.round(room.areaSqFt)} sq ft · {(room.areaSqFt * 0.0929).toFixed(1)} m²
+                  </text>
+                )}
+              </>
             )}
           </g>
         );
@@ -501,12 +521,25 @@ export default function PlanSvg({ design, floor, theme = 'paper', selectedRoomId
               </>
             );
           })()}
-          <g transform={`translate(${offsetX} ${PLAN_CANVAS - 22})`}>
-            <line x1="0" y1="0" x2={10 * scale} y2="0" strokeWidth="2" />
-            <line x1="0" y1="-4" x2="0" y2="4" />
-            <line x1={5 * scale} y1="-3" x2={5 * scale} y2="3" />
-            <line x1={10 * scale} y1="-4" x2={10 * scale} y2="4" />
-            <text x={10 * scale + 8} y="3.5" stroke="none">10 ft</text>
+          {/* Architectural graphic scale bar */}
+          <g transform={`translate(${offsetX} ${PLAN_CANVAS - 26})`}>
+            {/* 0 to 5 ft solid */}
+            <rect x={0} y={-3} width={5 * scale} height={4} fill={palette.wall} />
+            {/* 5 to 10 ft outline */}
+            <rect x={5 * scale} y={-3} width={5 * scale} height={4} fill="none" stroke={palette.wall} strokeWidth="0.8" />
+            {/* 10 to 20 ft solid */}
+            <rect x={10 * scale} y={-3} width={10 * scale} height={4} fill={palette.wall} />
+            {/* Ticks */}
+            <line x1={0} y1={-6} x2={0} y2={3} stroke={palette.wall} strokeWidth="1" />
+            <line x1={5 * scale} y1={-6} x2={5 * scale} y2={3} stroke={palette.wall} strokeWidth="1" />
+            <line x1={10 * scale} y1={-6} x2={10 * scale} y2={3} stroke={palette.wall} strokeWidth="1" />
+            <line x1={20 * scale} y1={-6} x2={20 * scale} y2={3} stroke={palette.wall} strokeWidth="1" />
+            {/* Numbers */}
+            <text x={0} y={-9} textAnchor="middle" stroke="none" fontSize="7.5" fontWeight="600">0</text>
+            <text x={5 * scale} y={-9} textAnchor="middle" stroke="none" fontSize="7.5" fontWeight="600">5</text>
+            <text x={10 * scale} y={-9} textAnchor="middle" stroke="none" fontSize="7.5" fontWeight="600">10</text>
+            <text x={20 * scale} y={-9} textAnchor="middle" stroke="none" fontSize="7.5" fontWeight="600">20 ft</text>
+            <text x={20 * scale + 10} y={1} stroke="none" fontSize="7.5" letterSpacing="0.6" opacity="0.8" fontWeight="600">GRAPHIC SCALE</text>
           </g>
         </g>
       )}

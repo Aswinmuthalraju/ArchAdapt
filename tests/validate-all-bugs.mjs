@@ -107,9 +107,11 @@ async function runTests() {
     console.log('✓ TEST 2: Bug 4 — Client-side exception when navigating to Gallery (/styles)');
     await page.goto(`${targetUrl}/how-it-works`, { waitUntil: 'networkidle' });
 
-    // Move mouse and trigger pointer events
+    // Move mouse and trigger pointer events, then scroll slightly up to bring header back
     await page.mouse.move(250, 250);
     await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(300);
+    await page.mouse.wheel(0, -100);
     await page.waitForTimeout(300);
 
     // Click Gallery in the header nav
@@ -287,7 +289,7 @@ async function runTests() {
     const slugs = ['kerala-traditional', 'modern', 'minimalist', 'contemporary', 'colonial', 'tropical', 'traditional-indian', 'modern-luxury'];
     for (const slug of slugs) {
       await mp.goto(`${targetUrl}/styles/${slug}`, { waitUntil: 'networkidle' });
-      await mp.locator('.style-feature-art svg').waitFor({ state: 'visible', timeout: 8000 });
+      await mp.locator('.style-feature-art img, .style-feature-art svg').waitFor({ state: 'visible', timeout: 8000 });
       const widths = await mp.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
       assert.ok(widths.sw <= widths.cw + 1, `${slug} scrolls sideways on a phone (${widths.sw} > ${widths.cw})`);
     }
