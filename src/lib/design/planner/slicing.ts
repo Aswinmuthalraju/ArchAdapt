@@ -208,8 +208,46 @@ export function mutate(trees: SNode[], rng: Rng, links?: [number, number][]): SN
   return out;
 }
 
+/**
+ * Rebuilds the slicing tree of an existing arrangement: rectangles that tile `bbox` exactly are split by a straight cut
+ * that no rectangle crosses, recursively. Returns null when the arrangement is not a slicing one.
+ */
+export function treeFromRects(items: { id: number; rect: Rect }[], bbox: Rect): SNode | null {
+  if (items.length === 0) return null;
+  if (items.length === 1) return { l: items[0].id };
+  const E = 0.12;
+  const tries: { c: 'V' | 'H'; at: number; a: typeof items; b: typeof items }[] = [];
+  const xs = Array.from(new Set(items.flatMap((it) => [it.rect.x, it.rect.x + it.rect.w]))).filter((v) => v > bbox.x + E && v < bbox.x + bbox.w - E);
+  const ys = Array.from(new Set(items.flatMap((it) => [it.rect.y, it.rect.y + it.rect.d]))).filter((v) => v > bbox.y + E && v < bbox.y + bbox.d - E);
+  for (const at of xs) {
+    const a = items.filter((it) => it.rect.x + it.rect.w <= at + E);
+    const b = items.filter((it) => it.rect.x >= at - E);
+    if (a.length && b.length && a.length + b.length === items.length) tries.push({ c: 'V', at, a, b });
+  }
+  for (const at of ys) {
+    const a = items.filter((it) => it.rect.y + it.rect.d <= at + E);
+    const b = items.filter((it) => it.rect.y >= at - E);
+    if (a.length && b.length && a.length + b.length === items.length) tries.push({ c: 'H', at, a, b });
+  }
+  tries.sort((p, q) => Math.abs(p.a.length - p.b.length) - Math.abs(q.a.length - q.b.length));
+  for (const t of tries) {
+    const boxA: Rect = t.c === 'V' ? { x: bbox.x, y: bbox.y, w: t.at - bbox.x, d: bbox.d } : { x: bbox.x, y: bbox.y, w: bbox.w, d: t.at - bbox.y };
+    const boxB: Rect = t.c === 'V' ? { x: t.at, y: bbox.y, w: bbox.x + bbox.w - t.at, d: bbox.d } : { x: bbox.x, y: t.at, w: bbox.w, d: bbox.y + bbox.d - t.at };
+    const left = treeFromRects(t.a, boxA);
+    const right = left && treeFromRects(t.b, boxB);
+    if (left && right) return { c: t.c, a: left, b: right };
+  }
+  return null;
+}
+
+/** Puts a new room beside an existing one in a tree. */
+export function insertBeside(tree: SNode, near: number, id: number, c: 'V' | 'H', first: boolean): SNode {
+  const at = leafIds(tree).indexOf(near);
+  return mapLeaf(tree, at, (leaf) => ({ c, a: first ? { l: id } : leaf, b: first ? leaf : { l: id } }));
+}
+
 /** Splits a rectilinear region (a bounding rectangle minus blocks) into rectangles. */
-export function subtractRects(region: Rect, blocks: Rect[], horizontalFirst: boolean): Rect[] {
+export function subtractRects(region: Rect, blocks: Rect[], horizontalFirst: boolean, isFreeAt?: (cx: number, cy: number) => boolean): Rect[] {
   const xs = new Set<number>([region.x, region.x + region.w]);
   const ys = new Set<number>([region.y, region.y + region.d]);
   for (const b of blocks) {
@@ -224,7 +262,7 @@ export function subtractRects(region: Rect, blocks: Rect[], horizontalFirst: boo
     for (let i = 0; i < X.length - 1; i++) {
       const cx = (X[i] + X[i + 1]) / 2;
       const cy = (Y[j] + Y[j + 1]) / 2;
-      free[j][i] = !blocks.some((b) => cx > b.x && cx < b.x + b.w && cy > b.y && cy < b.y + b.d);
+      free[j][i] = isFreeAt ? isFreeAt(cx, cy) : !blocks.some((b) => cx > b.x && cx < b.x + b.w && cy > b.y && cy < b.y + b.d);
     }
   }
   const pieces: Rect[] = [];
@@ -269,4 +307,12 @@ export function subtractRects(region: Rect, blocks: Rect[], horizontalFirst: boo
     flush(() => false, X.length - 1);
   }
   return pieces.filter((p) => p.w > 0.4 && p.d > 0.4);
+}
+
+/** Splits the union of several rectangles into non-overlapping rectangles. */
+export function partitionUnion(rects: Rect[], horizontalFirst = true): Rect[] {
+  if (!rects.length) return [];
+  const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
+  const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.d));
+  return subtractRects({ x: x0, y: y0, w: x1 - x0, d: y1 - y0 }, rects, horizontalFirst, (cx, cy) => rects.some((r) => cx > r.x && cx < r.x + r.w && cy > r.y && cy < r.y + r.d));
 }

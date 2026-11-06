@@ -1,10 +1,12 @@
 import { DesignConstraints, DesignProgram, PlannerAlternative, SiteInfo, StructuredDesignJSON } from '@/types/architectural';
+import { ARCHETYPES } from './model';
 import { LayoutResult, LayoutSuccess, layoutProgram } from '@/lib/design/layoutEngine';
 import { QualityReport, evaluateDesign } from '@/lib/design/quality';
 import { computeEnvelope, validatePolygon } from './envelope';
-import { DesignIntent, OptimizeOptions, PlanCandidate, optimizeLayouts } from './optimizer';
+import { designCells } from '@/lib/geometry/planGeometry';
+import { OptimizeOptions, PlanCandidate, optimizeLayouts } from './optimizer';
 
-export type { DesignIntent } from './optimizer';
+export type { DesignIntent } from '@/types/architectural';
 
 export interface PlanLayoutOptions extends OptimizeOptions {
   /** Skip the optimiser and use the band solver only (feasibility probes). */
@@ -60,7 +62,7 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
 
   const rejected: string[] = [];
   const consider = (id: string, label: string, summary: string, engine: RankedPlan['engine'], success: LayoutSuccess) => {
-    const quality = evaluateDesign(success.design, { hot: options.hot });
+    const quality = evaluateDesign(success.design, { hot: options.hot, intent: options.intent });
     if (!quality.metrics.valid) { rejected.push(`${label}: ${quality.metrics.errors.slice(0, 2).join(' | ')}`); return; }
     if (success.unreachable.length) { rejected.push(`${label}: rooms the door solver could not reach (${success.unreachable.join(', ')})`); return; }
     ranked.push({ id, label, summary, engine, success, quality });
@@ -73,7 +75,8 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
     bandResult.design.plot.roadEdges = site.roadEdges;
     bandResult.design.buildableAreaSqFt = Math.round(env.buildableArea);
   }
-  if (bandResult.ok) {
+  // An edit that must keep rooms where they are skips the band solver, which knows nothing about the old positions.
+  if (bandResult.ok && !options.anchors) {
     consider('band', 'Zoned bands', 'Living at the road, a circulation band in the middle with the stair, bedrooms behind. Reliable and economical.', 'band-solver', bandResult);
   }
   if (!options.fast) {
@@ -96,7 +99,25 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
   }
   // Prefer concepts that were not just shown to the user when a different one is requested.
   const avoid = new Set(options.avoid || []);
-  ranked.sort((a, b) => (avoid.has(a.id) ? 1 : 0) - (avoid.has(b.id) ? 1 : 0) || b.quality.score - a.quality.score);
+  // An archetype the client's words point to gets a small, disclosed head start (never enough to beat an invalid or clearly worse plan).
+  const favoured = new Set((options.intent?.preferredArchetypes || []).filter((id) => id in ARCHETYPES));
+  const FAVOUR = 2.5;
+  const rankScore = (r: RankedPlan) => r.quality.score + (favoured.has(r.id) ? FAVOUR : 0);
+  // When editing, a plan that keeps rooms where they were is worth more than a slightly better-scoring rearrangement.
+  const moved = (r: RankedPlan) => {
+    if (!options.anchors) return 0;
+    let count = 0;
+    let total = 0;
+    for (const cell of designCells(r.success.design)) {
+      const old = options.anchors.get(cell.id);
+      if (!old || cell.type === 'void') continue;
+      total++;
+      if (Math.abs(cell.rect.x - old.x) > 1.5 || Math.abs(cell.rect.y - old.y) > 1.5 || Math.abs(cell.rect.w - old.w) > 1.5 || Math.abs(cell.rect.d - old.d) > 1.5) count++;
+    }
+    return total ? count / total : 0;
+  };
+  const adjusted = (r: RankedPlan) => rankScore(r) - moved(r) * 30;
+  ranked.sort((a, b) => (avoid.has(a.id) ? 1 : 0) - (avoid.has(b.id) ? 1 : 0) || adjusted(b) - adjusted(a));
   const best = ranked[0];
   const alternatives: PlannerAlternative[] = ranked.map((r, i) => ({
     id: r.id, label: r.label, summary: r.summary, engine: r.engine, score: r.quality.score, selected: i === 0,
@@ -104,6 +125,7 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
   }));
   const rationale: string[] = [];
   rationale.push(`${best.label} scored ${best.quality.score.toFixed(1)} of 100 on circulation, room shape, adjacency, daylight and services${ranked.length > 1 ? `, ahead of ${ranked.slice(1).map((r) => `${r.label} (${r.quality.score.toFixed(1)})`).join(', ')}` : ''}.`);
+  if (favoured.has(best.id)) rationale.push(`${best.label} also matches what your notes asked for, which counted for ${FAVOUR} points.`);
   const weakest = [...best.quality.parts].sort((a, b) => a.score - b.score)[0];
   if (weakest && weakest.score < 0.85) rationale.push(`Its weakest area is ${weakest.label.toLowerCase()}: ${weakest.detail}.`);
   if (optimizerNote && !ranked.some((r) => r.engine === 'spatial-optimizer')) rationale.push(`The spatial optimiser could not improve on this brief: ${optimizerNote}`);

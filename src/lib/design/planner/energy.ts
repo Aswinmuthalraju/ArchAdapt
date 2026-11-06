@@ -38,6 +38,7 @@ interface Prepared {
   openLight: Float64Array;
   reached: Uint8Array;
   hops: Int16Array;
+  anchor: (Rect | undefined)[];
 }
 const cache = new WeakMap<EnergyCtx, Prepared>();
 function prepare(ctx: EnergyCtx): Prepared {
@@ -55,7 +56,8 @@ function prepare(ctx: EnergyCtx): Prepared {
   }
   p = {
     rooms, N, pairs, S: new Float64Array(N * N), ext: new Float64Array(N * 4), solidSide: new Float64Array(N * 4),
-    transitSide: new Float64Array(N * 4), openLight: new Float64Array(N), reached: new Uint8Array(N), hops: new Int16Array(N)
+    transitSide: new Float64Array(N * 4), openLight: new Float64Array(N), reached: new Uint8Array(N), hops: new Int16Array(N),
+    anchor: rooms.map((r) => ctx.anchors?.get(r.id))
   };
   cache.set(ctx, p);
   return p;
@@ -376,6 +378,19 @@ export function layoutEnergy(ctx: EnergyCtx, rects: Rect[], parts?: EnergyBreakd
       for (const v of edgeY) add('stacking', Math.min(1.5, near(v, g.ys)) * 0.35);
     }
   }
+  // ---- Stability: rooms stay where they were unless the edit needs them to move ----
+  if (ctx.anchors) {
+    const base = ctx.stayWeight ?? 0.18;
+    for (let i = 0; i < m; i++) {
+      const a = prep.anchor[i];
+      if (!a) continue;
+      const free = ctx.freeIds?.has(rooms[i].id);
+      const weight = free ? base * 0.25 : base;
+      const r = R[i];
+      add('stay', weight * (Math.abs(r.x + r.w / 2 - (a.x + a.w / 2)) + Math.abs(r.y + r.d / 2 - (a.y + a.d / 2)) + 0.4 * (Math.abs(r.w - a.w) + Math.abs(r.d - a.d))));
+    }
+  }
+
   // ---- Regularity: fewer distinct wall lines read as a calmer, more buildable plan ----
   {
     const xs = new Set<number>();

@@ -1,6 +1,7 @@
 import {
   ArchitecturalBrief,
   DesignConstraints,
+  DesignIntent,
   DesignPreferences,
   DesignProgram,
   DesignRequirements,
@@ -184,6 +185,7 @@ export function parseProgram(raw: unknown, constraints: DesignConstraints): Prog
     planningType: PLANNING_TYPES.includes(raw.planningType as DesignSignature['planningType']) ? (raw.planningType as DesignSignature['planningType']) : 'linear_circulation',
     circulationType: CIRCULATION_TYPES.includes(raw.circulationType as DesignSignature['circulationType']) ? (raw.circulationType as DesignSignature['circulationType']) : 'spine',
     architecturalBrief: parseBrief(raw.architecturalBrief),
+    intent: parseIntent(raw.intent, rooms),
     rationale: str(raw.rationale),
     circulationNotes: str(raw.circulationNotes),
     styleFeatures: strList(raw.styleFeatures),
@@ -195,6 +197,28 @@ export function parseProgram(raw: unknown, constraints: DesignConstraints): Prog
 
   normalizeProgram(program, notes);
   return { program, errors, notes };
+}
+
+const ARCHETYPE_IDS = ['spine', 'hub', 'wings', 'courtyard', 'compact'];
+
+/** Validates the AI's intent block: unknown rooms, silly weights and unknown planning ideas are dropped, not trusted. */
+export function parseIntent(value: unknown, rooms: ProgramRoom[]): DesignIntent | undefined {
+  if (!isRecord(value)) return undefined;
+  const known = (ref: string) => rooms.some((room) => room.id === ref || room.type === ref || room.id === `room-${ref}`) ? (rooms.some((room) => room.id === `room-${ref}`) ? `room-${ref}` : ref) : '';
+  const adjacency = Array.isArray(value.adjacency)
+    ? value.adjacency.filter(isRecord).slice(0, 12).map((link) => {
+        const a = known(str(link.a));
+        const b = known(str(link.b));
+        const weight = Math.max(1, Math.min(10, num(link.weight) ?? 5));
+        const kind = ['adj', 'near', 'avoid'].includes(str(link.kind)) ? (str(link.kind) as 'adj' | 'near' | 'avoid') : 'adj';
+        return { a, b, weight, kind };
+      }).filter((link) => link.a && link.b && link.a !== link.b)
+    : [];
+  const preferredArchetypes = strList(value.preferredArchetypes).filter((id) => ARCHETYPE_IDS.includes(id)).slice(0, 2);
+  const priorities = strList(value.priorities).slice(0, 5);
+  const reasons = strList(value.reasons).slice(0, 8);
+  if (!adjacency.length && !preferredArchetypes.length && !priorities.length && !reasons.length) return undefined;
+  return { adjacency, preferredArchetypes, priorities, reasons };
 }
 
 function parseBrief(value: unknown): ArchitecturalBrief | undefined {

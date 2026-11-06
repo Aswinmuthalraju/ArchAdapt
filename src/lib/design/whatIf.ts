@@ -14,6 +14,9 @@ import { callGeminiJson, geminiApiKey } from '@/lib/genai/gemini';
 import { SYSTEM_ARCHITECTURAL_PROMPT, buildWhatIfDeltaPrompt } from '@/lib/genai/prompts';
 import { realiseProgram, MAX_GENERATION_ATTEMPTS, EngineId } from './pipeline';
 import { DEFAULT_BAND, constraintsFromDesign, normalizeProgram, programFromDesign } from './program';
+import { Rect, designCells } from '@/lib/geometry/planGeometry';
+import { EditDiff, EditStrategy, attemptSurgery, diffDesigns } from './surgery';
+import { evaluateDesign } from './quality';
 import { REQUIRED_SPACE_TYPES, ROOM_TYPE_SPECS, floorName, isBedroomType, normalizeRoomType } from './roomTypes';
 
 export type WhatIfOutcome =
@@ -27,6 +30,12 @@ export type WhatIfOutcome =
       engine: EngineId | 'local-interpreter';
       modelId: string;
       geometryChanged: boolean;
+      /** Room-by-room account of what the change touched. Nothing is saved until the client accepts it. */
+      diff: EditDiff;
+      strategy: EditStrategy;
+      /** Why a surgical edit was not possible, when the whole plan had to be re-planned. */
+      surgeryNote?: string;
+      quality?: { before: number; after: number };
     }
   | { status: 'INFEASIBLE'; reason: string; violatedConstraints: string[]; summary: string; engine: string }
   | { status: 'INPUT_REJECTED'; reason: string }
@@ -45,6 +54,8 @@ export function siteFromDesign(design: StructuredDesignJSON): SiteInfo {
     totalArea: design.plot.totalArea || design.plot.width * design.plot.depth,
     orientation: design.plot.orientation as SiteInfo['orientation'],
     allowPorchInSetback: design.plot.allowPorchInSetback,
+    polygon: design.plot.polygon,
+    roadEdges: design.plot.roadEdges,
     // Only canonical designs carry setbacks the layout engine chose; older ones get the standard rule.
     setbacks: (design.schemaVersion || 1) >= 2 ? design.plot.setbacks : undefined
   };
@@ -356,8 +367,10 @@ export function interpretRequestLocally(message: string, program: DesignProgram,
   if (/\b(add|another|extra|one more|include|need|want)\b/.test(text)) {
     const countMatch = text.match(/\b(\d+|a|an|one|another|two|three|four|five|six|seven|eight|nine|ten)\b(?:\s+more)?\s+(?:\w+\s+){0,2}?(?:bed|bath|toilet|kitchen|living|dining|study|office|store|storage|puja|prayer|balcon|courtyard|utility|parking|car|lounge|terrace|guest)/);
     const quantity = Math.min(20, countMatch ? COUNT_WORDS[countMatch[1]] || Number(countMatch[1]) || 1 : 1);
+    const wantsMaster = /master/.test(text);
     const attachTo = type === 'bathroom' && /attached|ensuite|en-suite/.test(text)
-      ? program.rooms.find((room) => isBedroomType(room.type) && (floor === undefined || room.floor === floor) && !program.rooms.some((bath) => bath.type === 'bathroom' && bath.attachedTo === room.id))
+      ? program.rooms.find((room) => (wantsMaster ? room.type === 'master_bedroom' : isBedroomType(room.type)) && (floor === undefined || room.floor === floor) && !program.rooms.some((bath) => bath.type === 'bathroom' && bath.attachedTo === room.id))
+        || (wantsMaster ? program.rooms.find((room) => room.type === 'master_bedroom') : undefined)
       : undefined;
     const addType: RoomType = type === 'master_bedroom' && program.rooms.some((room) => room.type === 'master_bedroom') ? 'bedroom' : type;
     return {
@@ -448,16 +461,51 @@ export async function runWhatIf(design: StructuredDesignJSON, message: string): 
       next.appearance = applied.appearance;
       if (next.program) next.program.appearance = applied.appearance;
       next.generationMetadata = { intent: 'MODIFY_CURRENT_DESIGN', engine: engine === 'gemini' ? 'gemini' : 'local-rule-engine', modelId, attempts: attempt, generatedAt: new Date().toISOString() };
-      return { status: 'OK', design: next, summary, tradeOffs: delta.tradeOffs, changes: applied.changes, warnings: [], engine, modelId, geometryChanged: false };
+      return { status: 'OK', design: next, summary, tradeOffs: delta.tradeOffs, changes: applied.changes, warnings: [], engine, modelId, geometryChanged: false, diff: diffDesigns(design, next, 'appearance-only'), strategy: 'appearance-only' };
     }
 
-    const stage = realiseProgram(applied.program, site, applied.constraints);
+    const metadata = { intent: 'MODIFY_CURRENT_DESIGN' as const, engine: (engine === 'gemini' ? 'gemini' : 'local-rule-engine') as 'gemini' | 'local-rule-engine', modelId, attempts: attempt, generatedAt: new Date().toISOString() };
+    const qualityBefore = evaluateDesign(design).score;
+
+    // 1. Edit the geometry that exists. Only the rooms around the change may move.
+    const surgery = attemptSurgery({ design, program: applied.program, before: program, constraints: applied.constraints, site, ops: delta.ops, hot: constraints.modes.includes('climate_adaptive') });
+    if (surgery.ok) {
+      const edited = surgery.design;
+      edited.appearance = applied.appearance || design.appearance || edited.appearance;
+      edited.layoutNotes = [...surgery.notes, ...(design.layoutNotes || []).filter((n) => !/^Surgical|^Edit:/.test(n))];
+      edited.generationMetadata = metadata;
+      edited.program = applied.program;
+      const diff = diffDesigns(design, edited, surgery.strategy);
+      if (!diff.rooms.some((r) => r.kind !== 'unchanged')) {
+        return { status: 'INFEASIBLE', reason: 'The plan did not change: the requested edit could not be made without breaking a rule.', violatedConstraints: [], summary, engine };
+      }
+      const achieved = surgery.achieved;
+      const honest = achieved
+        ? `${achieved.roomName}: ${achieved.before} → ${achieved.got} sq ft${Math.abs(achieved.got - achieved.wanted) > 6 ? ` (you asked for ${achieved.wanted}; the neighbouring rooms could give up only that much)` : ''}.`
+        : summary;
+      return {
+        status: 'OK', design: edited, summary: achieved ? honest : summary, tradeOffs: [...delta.tradeOffs, ...surgery.notes, `${diff.preserved} of ${diff.total} rooms were left exactly as they were.`],
+        changes: applied.changes, warnings: [], engine, modelId, geometryChanged: true, diff, strategy: surgery.strategy, quality: { before: qualityBefore, after: evaluateDesign(edited).score }
+      };
+    }
+
+    // 2. Last resort: re-plan the whole house, and show the client exactly what moved.
+    // The old positions pull the new plan back toward them, so a full re-plan moves as little as the change allows.
+    const anchors = new Map<string, Rect>(designCells(design).map((c) => [c.id, c.rect] as [string, Rect]));
+    const freeIds = new Set(delta.ops.flatMap((op) => ('target' in op && op.target ? [applied.program.rooms.find((r) => r.id === op.target || r.name === op.target)?.id || op.target] : [])));
+    const stage = realiseProgram(applied.program, site, applied.constraints, { hot: constraints.modes.includes('climate_adaptive'), intent: design.program?.intent, anchors, freeIds, effort: 1.3 });
     if (stage.design) {
       stage.design.conceptNumber = design.conceptNumber;
       stage.design.appearance = applied.appearance || design.appearance || stage.design.appearance;
       stage.design.layoutNotes = stage.notes;
-      stage.design.generationMetadata = { intent: 'MODIFY_CURRENT_DESIGN', engine: engine === 'gemini' ? 'gemini' : 'local-rule-engine', modelId, attempts: attempt, generatedAt: new Date().toISOString() };
-      return { status: 'OK', design: stage.design, summary, tradeOffs: [...delta.tradeOffs, ...stage.notes], changes: applied.changes, warnings: stage.warnings, engine, modelId, geometryChanged: true };
+      stage.design.generationMetadata = metadata;
+      const diff = diffDesigns(design, stage.design, 'full-replan');
+      const moved = diff.rooms.filter((r) => r.kind !== 'unchanged' && r.kind !== 'added' && r.kind !== 'removed').map((r) => r.name);
+      const surgeryNote = `This could not be done by editing the existing drawing (${surgery.reason}) so the whole plan was re-planned. ${diff.touched} of ${diff.total} existing rooms moved or changed size${moved.length ? `: ${moved.slice(0, 6).join(', ')}${moved.length > 6 ? '…' : ''}` : ''}. Review the comparison before accepting.`;
+      return {
+        status: 'OK', design: stage.design, summary, tradeOffs: [...delta.tradeOffs, surgeryNote, ...stage.notes], changes: applied.changes, warnings: stage.warnings, engine, modelId, geometryChanged: true,
+        diff, strategy: 'full-replan', surgeryNote, quality: { before: qualityBefore, after: evaluateDesign(stage.design).score }
+      };
     }
 
     lastFailure = {

@@ -1,5 +1,5 @@
 import {
-  DesignConstraints, DesignProgram, ProgramRoom, RoomType, SiteInfo, StructuredDesignJSON
+  DesignConstraints, DesignIntent, DesignProgram, ProgramRoom, RoomType, SiteInfo, StructuredDesignJSON
 } from '@/types/architectural';
 import { PlacedRoom, WorkRoom, LayoutFailure, assembleDesign } from '@/lib/design/layoutEngine';
 import { ROOM_TYPE_SPECS, floorName, isBedroomType } from '@/lib/design/roomTypes';
@@ -8,16 +8,8 @@ import { Envelope, computeEnvelope } from './envelope';
 import { validateFloorPlan } from '@/lib/design/validateFloorPlan';
 import { HARD_TERMS, layoutEnergy } from './energy';
 import { ARCHETYPES, ArchId, Archetype, EnergyCtx, FixedCell, PRoom, PairSpec } from './model';
-import { Rng, SNode, Sizing, isLeaf, leafIds, mulberry32, mutate, realize, seedTree, subtractRects } from './slicing';
+import { Rng, SNode, Sizing, insertBeside, isLeaf, leafIds, mulberry32, mutate, realize, seedTree, subtractRects, treeFromRects } from './slicing';
 
-export interface DesignIntent {
-  /** Pairs of room types (or ids) that should share a wall, with a weight 1-10, from the AI brief. */
-  adjacency?: { a: string; b: string; weight: number; kind?: 'adj' | 'near' | 'avoid' }[];
-  /** Archetypes the brief favours, best first. */
-  preferredArchetypes?: ArchId[];
-  /** Plain-language reasons shown to the user. */
-  reasons?: string[];
-}
 
 export interface OptimizeOptions {
   hot?: boolean;
@@ -28,6 +20,10 @@ export interface OptimizeOptions {
   seedOffset?: number;
   /** Scales iteration counts (tests use less). */
   effort?: number;
+  /** Where rooms were before an edit (by id). Plans that keep rooms where they were are preferred. */
+  anchors?: Map<string, Rect>;
+  /** Rooms the edit is about: they may move freely. */
+  freeIds?: Set<string>;
   /** Stop retrying once this much time has passed (ms). The first attempt of every archetype always runs. */
   budgetMs?: number;
 }
@@ -68,7 +64,7 @@ function hashString(s: string): number {
 const STAIR_TARGET = 84;
 const LOBBY_TARGET = 64;
 
-function toPRoom(room: ProgramRoom, scale: number): PRoom {
+export function toPRoom(room: ProgramRoom, scale: number): PRoom {
   const spec = ROOM_TYPE_SPECS[room.type];
   const hintY = room.band === 'front' ? 0.2 : room.band === 'rear' ? 0.8 : undefined;
   const hintX = room.side === 'left' ? 0.2 : room.side === 'right' ? 0.8 : undefined;
@@ -79,7 +75,7 @@ function toPRoom(room: ProgramRoom, scale: number): PRoom {
   };
 }
 
-function derived(id: string, name: string, type: RoomType, floor: number, target: number, extra: Partial<PRoom> = {}): PRoom {
+export function derived(id: string, name: string, type: RoomType, floor: number, target: number, extra: Partial<PRoom> = {}): PRoom {
   const spec = ROOM_TYPE_SPECS[type];
   return {
     id, name, type, floor, target, minArea: Math.min(spec.minArea, target), minSide: spec.minSide, maxAspect: MAX_ASPECT[type] ?? 3,
@@ -123,7 +119,7 @@ function buildPlan(program: DesignProgram, constraints: DesignConstraints, arch:
 }
 
 /** Pairs of rooms that must or should touch, from the programme, the brief and architectural convention. */
-function pairsFor(rooms: PRoom[], intent: DesignIntent | undefined, tight: boolean): PairSpec[] {
+export function pairsFor(rooms: PRoom[], intent: DesignIntent | undefined, tight: boolean): PairSpec[] {
   const ids = new Set(rooms.map((r) => r.id));
   const byType = (t: string) => rooms.filter((r) => r.type === t);
   const out: PairSpec[] = [];
@@ -154,7 +150,7 @@ function pairsFor(rooms: PRoom[], intent: DesignIntent | undefined, tight: boole
   return out;
 }
 
-interface FloorSolution {
+export interface FloorSolution {
   rects: Rect[];
   energy: number;
   trees: SNode[];
@@ -168,7 +164,7 @@ function realizeAll(trees: SNode[], pieces: Rect[], sizing: Sizing, out: Rect[])
   for (let i = 0; i < trees.length; i++) realize(trees[i], pieces[i], sizing, out);
 }
 
-function anneal(
+export function anneal(
   ctx: EnergyCtx, pieces: Rect[], start: SNode[], iters: number, rng: Rng, t0 = 7, t1 = 0.06
 ): FloorSolution {
   const sizing = sizingFor(ctx.rooms);
@@ -201,7 +197,36 @@ function anneal(
   return { rects: best.rects, energy: best.energy, trees: best.trees };
 }
 
-function hardCost(ctx: EnergyCtx, rects: Rect[]): number {
+/** Rebuilds the previous arrangement as a starting point, so a re-plan after an edit begins from the plan the client already knows. */
+export function warmStart(ctx: EnergyCtx, rooms: PRoom[], piece: Rect, anchors?: Map<string, Rect>): SNode[] | null {
+  if (!anchors) return null;
+  const known = rooms.map((r, i) => ({ id: i, rect: anchors.get(r.id) })).filter((x): x is { id: number; rect: Rect } => !!x.rect);
+  if (known.length < 2) return null;
+  const x0 = Math.min(...known.map((k) => k.rect.x)), y0 = Math.min(...known.map((k) => k.rect.y));
+  const box: Rect = { x: x0, y: y0, w: Math.max(...known.map((k) => k.rect.x + k.rect.w)) - x0, d: Math.max(...known.map((k) => k.rect.y + k.rect.d)) - y0 };
+  if (Math.abs(box.w * box.d - known.reduce((s, k) => s + k.rect.w * k.rect.d, 0)) > 3) return null;
+  let tree = treeFromRects(known, box);
+  if (!tree) return null;
+  const sizing = sizingFor(rooms);
+  const knownIds = new Set(known.map((k) => k.id));
+  for (let id = 0; id < rooms.length; id++) {
+    if (knownIds.has(id)) continue;
+    let best: { tree: SNode; e: number } | null = null;
+    for (const near of leafIds(tree)) for (const c of ['V', 'H'] as const) for (const first of [true, false]) {
+      const cand = insertBeside(tree, near, id, c, first);
+      const out: Rect[] = new Array(rooms.length);
+      realize(cand, piece, sizing, out);
+      if (leafIds(cand).some((l) => !out[l])) continue;
+      const partial = out.map((r, i) => r || { x: piece.x, y: piece.y, w: 1, d: 1 });
+      const e = layoutEnergy(ctx, partial);
+      if (!best || e < best.e) best = { tree: cand, e };
+    }
+    if (best) tree = best.tree;
+  }
+  return [tree];
+}
+
+export function hardCost(ctx: EnergyCtx, rects: Rect[]): number {
   const parts: Record<string, number> = {};
   layoutEnergy(ctx, rects, parts);
   let total = 0;
@@ -210,7 +235,7 @@ function hardCost(ctx: EnergyCtx, rects: Rect[]): number {
 }
 
 /** If a plan still breaks a hard rule, anneal again with those rules weighted more heavily. */
-function repair(ctx: EnergyCtx, pieces: Rect[], sol: FloorSolution, iters: number, rng: Rng): FloorSolution {
+export function repair(ctx: EnergyCtx, pieces: Rect[], sol: FloorSolution, iters: number, rng: Rng): FloorSolution {
   let best = sol;
   let bestHard = hardCost(ctx, sol.rects);
   for (let k = 0; k < 3 && bestHard > 0.25; k++) {
@@ -226,7 +251,7 @@ function repair(ctx: EnergyCtx, pieces: Rect[], sol: FloorSolution, iters: numbe
 }
 
 /** Starting arrangement: rooms ordered from the road to the rear and split by weight. */
-function startTrees(rooms: PRoom[], pieces: Rect[], rng: Rng, arch: Archetype, floor: number): SNode[] {
+export function startTrees(rooms: PRoom[], pieces: Rect[], rng: Rng, arch: Archetype, floor: number): SNode[] {
   const rank = (r: PRoom): number => {
     const t = r.type;
     if (floor === 0) {
@@ -282,7 +307,7 @@ function startTrees(rooms: PRoom[], pieces: Rect[], rng: Rng, arch: Archetype, f
   return bins.map((bin, p) => (bin.length ? seedTree(bin, (id) => rank(rooms[id]), weight, pieces[p], rng) : { l: -1 } as SNode));
 }
 
-function bestPartition(region: Rect, blocks: Rect[]): Rect[] {
+export function bestPartition(region: Rect, blocks: Rect[]): Rect[] {
   if (!blocks.length) return [region];
   const a = subtractRects(region, blocks, true);
   const b = subtractRects(region, blocks, false);
@@ -315,7 +340,7 @@ function upperBoxes(fp: Rect, stair: Rect | null, area: number): Rect[] {
   return out;
 }
 
-function groundLines(rects: Rect[], rooms: PRoom[]) {
+export function groundLines(rects: Rect[], rooms: PRoom[]) {
   const xs = new Set<number>(), ys = new Set<number>();
   const wet: Rect[] = [];
   rects.forEach((r, i) => {
@@ -327,8 +352,10 @@ function groundLines(rects: Rect[], rooms: PRoom[]) {
 
 interface Footprint { rect: Rect; label: string }
 
-function footprintCandidates(env: Envelope, area: number): Footprint[] {
+function footprintCandidates(env: Envelope, area: number, previous?: Rect): Footprint[] {
   const out: Footprint[] = [];
+  // An edit keeps the footprint the house already has when the programme still fits in it.
+  if (previous && env.fits(previous) && previous.w * previous.d >= area * 0.96) out.push({ rect: previous, label: 'existing footprint' });
   const tryAspect = (r: number, label: string) => {
     const w = snap(Math.sqrt(area * r));
     const d = snap(area / w);
@@ -455,11 +482,18 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
     // ---- Ground floor ----
     const groundRooms = plan.rooms[0];
     const groundArea = sum(groundRooms.map((r) => r.target));
-    const footprints = footprintCandidates(env, groundArea);
+    const previousFootprint = opts.anchors ? (() => {
+      const rs = groundRooms.map((r) => opts.anchors!.get(r.id)).filter((r): r is Rect => !!r);
+      if (rs.length < 3) return undefined;
+      const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y));
+      return { x: x0, y: y0, w: Math.max(...rs.map((r) => r.x + r.w)) - x0, d: Math.max(...rs.map((r) => r.y + r.d)) - y0 };
+    })() : undefined;
+    const footprints = footprintCandidates(env, groundArea, previousFootprint);
     if (!footprints.length) return { skip: `${arch.label}: no ${Math.round(groundArea)} sq ft rectangle fits the buildable area.` };
     const pairs0 = pairsFor(groundRooms, opts.intent, tight);
     const ctxFor = (fp: Rect, rooms: PRoom[], fixed: FixedCell[], pairs: PairSpec[], floor: number, ground?: EnergyCtx['groundLines']): EnergyCtx => ({
-      rooms, fixed, footprint: fp, frontY: fp.y, floor, floors, arch, pairs, hot, compass, tight, groundLines: ground
+      rooms, fixed, footprint: fp, frontY: fp.y, floor, floors, arch, pairs, hot, compass, tight, groundLines: ground,
+      anchors: opts.anchors, freeIds: opts.freeIds
     });
     let bestGround: (FloorSolution & { fp: Footprint }) | null = null;
     for (const fp of footprints) {
@@ -471,8 +505,11 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
     const fpRect = bestGround!.fp.rect;
     const ctx0 = ctxFor(fpRect, groundRooms, [], pairs0, 0);
     const tightness = plan.scale < 0.92 || env.largest.w * env.largest.d < groundArea * 1.08 ? 2.2 : 1;
-    let ground = anneal(ctx0, [fpRect], bestGround!.trees, iterations(4200 * tightness), mulberry32(seedBase + 2), 3.2, 0.04);
-    const restarts = tightness > 1 ? 4 : 1;
+    const warm = warmStart(ctx0, groundRooms, fpRect, opts.anchors);
+    let ground = warm
+      ? anneal(ctx0, [fpRect], warm, iterations(2600), mulberry32(seedBase + 2), 1.4, 0.04)
+      : anneal(ctx0, [fpRect], bestGround!.trees, iterations(4200 * tightness), mulberry32(seedBase + 2), 3.2, 0.04);
+    const restarts = warm ? 0 : tightness > 1 ? 4 : 1;
     for (let k = 0; k < restarts; k++) {
       const again = anneal(ctx0, [fpRect], startTrees(groundRooms, [fpRect], mulberry32((seedBase ^ 0x51ed) + k * 101), arch, 0), iterations(2800 * tightness), mulberry32(seedBase + 3 + k));
       const hardA = hardCost(ctx0, again.rects);

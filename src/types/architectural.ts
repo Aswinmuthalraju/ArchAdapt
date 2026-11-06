@@ -158,6 +158,8 @@ export interface DesignConstraints {
 }
 
 export interface DesignProgram {
+  /** What the client's words mean for the plan (adjacency weights, preferred planning idea). */
+  intent?: DesignIntent;
   rooms: ProgramRoom[];
   stairSide: 'left' | 'right';
   planningType: DesignSignature['planningType'];
@@ -265,6 +267,24 @@ export interface SpatialGraph {
   avoidAdjacencies: [string, string][];
   verticalConnections: { stairId: string; connectLevels: [number, number] }[];
   indoorOutdoorConnections: { roomId: string; outdoorSpaceId: string }[];
+}
+
+/** What the client's words mean for the plan: weighted adjacency, a preferred planning idea and the reasons for both. */
+export interface DesignIntent {
+  /** Pairs of room ids or room types. weight 1-10: 8+ must touch, 1-4 mild preference. */
+  adjacency?: { a: string; b: string; weight: number; kind?: 'adj' | 'near' | 'avoid' }[];
+  preferredArchetypes?: string[];
+  priorities?: string[];
+  reasons?: string[];
+}
+
+/** What was understood from the client's notes, shown back to them. */
+export interface BriefReading {
+  understood: string[];
+  conflicts: string[];
+  reasons: string[];
+  /** 'ai' when Gemini contributed intent, 'rules' when only the built-in reader did. */
+  source: 'ai+rules' | 'rules';
 }
 
 export interface PlannerAlternative {
@@ -377,6 +397,7 @@ export interface StructuredDesignJSON {
   designSignature?: DesignSignature;
   appearance?: HouseAppearance;
   generationMetadata?: DesignGenerationMetadata;
+  briefReading?: BriefReading;
   /** How the plan was produced and how it compares with the alternatives that were considered. */
   planner?: PlannerReport;
   planExplanation?: {

@@ -3,6 +3,7 @@ import { buildableEnvelope } from '@/lib/design/layoutEngine';
 import { planCompass } from '@/lib/geometry/planGeometry';
 import { ROOM_TYPE_SPECS } from '@/lib/design/roomTypes';
 import { styleDirectiveBlock } from '@/lib/design/styleBlueprints';
+import { factsBlock, ExtractedFacts } from './briefing';
 
 const AUTHORABLE_TYPES = ['entrance', 'living', 'dining', 'kitchen', 'utility', 'master_bedroom', 'bedroom', 'guest_room', 'bathroom', 'study', 'store', 'puja', 'parking', 'balcony', 'courtyard', 'lounge', 'dressing', 'terrace'] as const;
 
@@ -14,18 +15,18 @@ You therefore do NOT output coordinates. You output a ROOM PROGRAMME: which room
 are, which floor and zone each sits in, and how rooms relate to each other. Every decision you make
 changes the resulting plan, so reason from this site, this family and these modes, not from a stock layout.
 
-HOW THE PLAN IS ORGANISED
-- The road is always the plan FRONT. Each floor is divided into three zones by depth from the road:
-  "front" (arrival and public rooms), "middle" (the circulation zone, which also holds the staircase)
-  and "rear" (quiet rooms).
-- Within a zone, rooms sit side by side. "side" says where: "left", "center" or "right" as seen on the
-  plan with the road at the top. The compass direction of each side is given to you.
-- A room with "attachedTo" shares a wall and a door with that room. Bathrooms, dressing rooms and stores
-  attached to a room are stacked beside it; an entrance/verandah, balcony or utility attached to a room
-  sits in the same column on its outward side.
-- The staircase is added by the engine at the "stairSide" end of the middle zone. Put the kitchen at the
-  OTHER end of the middle zone and a living/dining/lounge room next to the stair.
-- The engine adds stairs, passages and roof terraces itself. Never output rooms of type stair, passage or void.
+HOW THE PLAN IS MADE
+- A spatial optimiser searches many arrangements of your rooms inside the real buildable outline (it may be
+  irregular) and keeps the one that best satisfies what you declare; a geometry stage then draws walls, doors,
+  windows and the stair. So think in RELATIONSHIPS and PRIORITIES, not positions.
+- The optimiser enforces and trades off: "attachedTo" (shares a wall and a door), CONNECTED_TO / ADJACENT_TO
+  (must touch), NEAR (should be close), PRIVATE_FROM (kept apart), plus daylight, privacy, plumbing and circulation.
+  Your "intent" block below states, with weights, which relationships matter most for THIS household.
+- "band" and "side" are only weak position hints (front = toward the road, rear = away from it; left/right as seen
+  from the road; compass directions are given to you). Use them for statements like "quiet rooms at the back",
+  never as a layout.
+- The road is always the plan FRONT. The engine adds stairs, passages, landings and roof terraces itself.
+  Never output rooms of type stair, passage or void.
 
 HARD RULES
 - Hard requirements must be met exactly. Never reduce the bedroom count, bathroom count or floor count,
@@ -42,6 +43,8 @@ export interface ProgramPromptInput {
   customRequirements?: string;
   secondaryStyle?: string;
   ragContext: string;
+  /** Facts read from the client's own notes by the rule-based reader. */
+  facts?: ExtractedFacts;
 }
 
 function siteBlock({ site, location, constraints }: ProgramPromptInput): string {
@@ -105,6 +108,12 @@ const SCHEMA_BLOCK = `OUTPUT (JSON object)
       "features": ["short factual notes about this room"]
     }
   ],
+  "intent": {
+    "priorities": ["up to 5 short phrases in the client's terms, most important first"],
+    "adjacency": [{ "a": "room id or room type", "b": "room id or room type", "weight": 7, "kind": "adj | near | avoid" }],
+    "preferredArchetypes": ["spine | hub | wings | courtyard | compact"],
+    "reasons": ["one sentence each, linking something the client said or the site demands to a planning decision"]
+  },
   "architecturalBrief": {
     "planningIntent": "", "siteResponse": "", "orientationStrategy": "", "publicPrivateStrategy": "", "serviceStrategy": "",
     "circulationStrategy": "", "climateStrategy": "", "accessibilityStrategy": "", "styleStrategy": ""
@@ -127,13 +136,16 @@ PROGRAMME RULES
 - On every upper floor include one "lounge" (landing/family room) in the middle zone; the upper rooms open from it.
 - Keep living → dining → kitchen in an unbroken sequence (use CONNECTED_TO), and keep bedrooms PRIVATE_FROM the living room. In practice: living in the front zone; dining in the middle zone on the SAME side as the living room; kitchen at the far end of the middle zone from the stair. A courtyard goes in the middle zone of floor 0 and the engine places it at the centre of that zone: it needs a walled room on each side of it (the stair counts), the living room in front and rooms behind, so it is enclosed on all four sides. It must never sit between dining and kitchen, and must be at least 81 sq ft with no side under 9 ft. If the envelope cannot enclose one, leave it out unless the client asked for it.
 - Only include rooms the brief asks for, plus an entrance, one utility, and one lounge per upper floor. Do not add guest rooms, studies, prayer rooms, stores or extra bathrooms that were neither requested nor required by the STYLE MANDATE.
-- Use relationships to state the reasoning the geometry must honour; do not list relationships you do not need.`;
+- Use relationships to state the reasoning the geometry must honour; do not list relationships you do not need.
+- INTENT: at most 12 adjacency entries, only for relationships that matter for THIS household. Weight 8-10 = must touch, 5-7 = strongly preferred, 1-4 = mild. kind "avoid" keeps two rooms apart (a bedroom from the street-facing living room). preferredArchetypes: spine = a passage separates public rooms from bedrooms; hub = bedrooms open off a family lounge; wings = public wing and private wing; courtyard = rooms around an open court; compact = living-dining-kitchen as one open space. Choose at most two, and say why in "reasons".
+- Never invent a hard requirement the client did not state. Spaces the client mentioned in their notes but did not switch on in the form may be added as rooms with "required": false.`;
 
 export function buildProgramPrompt(input: ProgramPromptInput, feedback?: string[]): string {
   return [
     'DESIGN A ROOM PROGRAMME FOR THIS HOUSE.',
     siteBlock(input),
     requirementsBlock(input),
+    input.facts ? factsBlock(input.facts) : '',
     `STYLE AND DESIGN KNOWLEDGE (retrieved for this ${input.constraints.style} brief; the style items define how this house must differ from other styles)\n${input.ragContext}`,
     SCHEMA_BLOCK,
     feedback?.length

@@ -8,6 +8,7 @@ import {
   StructuredDesignJSON
 } from '@/types/architectural';
 import { callGeminiJson, geminiApiKey } from '@/lib/genai/gemini';
+import { intentFromFacts, mergeIntent, preprocessBrief } from '@/lib/genai/briefing';
 import { buildLocalProgram } from '@/lib/genai/localPlanner';
 import { SYSTEM_ARCHITECTURAL_PROMPT, buildAlternativeProgramPrompt, buildProgramPrompt, ProgramPromptInput } from '@/lib/genai/prompts';
 import { getRelevantKnowledge } from '@/lib/genai/rag/architecturalKnowledge';
@@ -233,7 +234,10 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
   // The band solver above only answers "does this brief fit at all". The spatial optimiser now plans the chosen
   // programme properly, and may find a way where the band solver could not (narrow plots, odd proportions).
   const climateZone = location.climateZone || '';
+  const facts = preprocessBrief(custom, constraints);
+  const ruleIntent = intentFromFacts(facts, constraints);
   const planOptions: PlanLayoutOptions = {
+    intent: ruleIntent,
     hot: baseConstraintsHot(baseConstraints, climateZone),
     seedOffset: input.alternativeTo ? conceptNumber : 0,
     avoid: input.alternativeTo?.planner?.archetype ? [input.alternativeTo.planner.archetype] : []
@@ -262,6 +266,7 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
       return { status: 'INVALID_DESIGN', reason: 'The built-in rule engine could not produce a valid plan for this brief.', violatedConstraints: baseline.errors, attempts: 1, canUseLocalEngine: false };
     }
     stamp(baseline.design, intent, 'local-rule-engine', 'local-rule-engine', 1, conceptNumber);
+    baseline.design.briefReading = { understood: facts.understood, conflicts: facts.conflicts, reasons: ruleIntent.reasons || [], source: 'rules' };
     onStage?.('validating', 'Validating structural stacking, circulation and setbacks...');
     baseline.design.planExplanation = buildPlanExplanation(baseline.design, constraints, site, { isValid: true, errors: [], warnings: baseline.warnings });
     return { status: 'OK', design: baseline.design, engine: 'local-rule-engine', modelId: 'local-rule-engine', attempts: 1, warnings: [...styleNotes, ...baseline.warnings], notes: baseline.notes, notice, alternatives: alternativesOf(baseline) };
@@ -277,7 +282,8 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
   const promptInput: ProgramPromptInput = {
     site, location, constraints, customRequirements: custom,
     secondaryStyle: typeof preferences.secondaryStyle === 'string' ? preferences.secondaryStyle : undefined,
-    ragContext: getRelevantKnowledge(custom, preferences.modes || [], constraints.style)
+    ragContext: getRelevantKnowledge(custom, preferences.modes || [], constraints.style),
+    facts
   };
   const currentProgram = input.alternativeTo ? programFromDesign(input.alternativeTo) : null;
   const deadline = Date.now() + TIME_BUDGET_MS;
@@ -328,10 +334,13 @@ export async function generateDesign(input: GenerationInput): Promise<Generation
       continue;
     }
     onStage?.('laying_out', 'Synthesizing room geometry, walls, openings and staircase well...');
-    const stage = realiseProgram(parsed.program, site, constraints, planOptions);
+    const aiIntent = parsed.program.intent;
+    const stage = realiseProgram(parsed.program, site, constraints, { ...planOptions, intent: mergeIntent(aiIntent, ruleIntent) });
     if (stage.design) {
       onStage?.('validating', 'Validating structural stacking, circulation and setbacks...');
       stamp(stage.design, intent, 'gemini', call.modelId, attempts, conceptNumber);
+      const merged = mergeIntent(aiIntent, ruleIntent);
+      stage.design.briefReading = { understood: facts.understood, conflicts: facts.conflicts, reasons: merged.reasons || [], source: aiIntent ? 'ai+rules' : 'rules' };
       stage.design.layoutNotes = [...parsed.notes, ...stage.notes];
       stage.design.planExplanation = buildPlanExplanation(stage.design, constraints, site, { isValid: true, errors: [], warnings: stage.warnings });
       return { status: 'OK', design: stage.design, engine: 'gemini', modelId: call.modelId, attempts, warnings: [...styleNotes, ...stage.warnings], notes: stage.design.layoutNotes, alternatives: alternativesOf(stage) };

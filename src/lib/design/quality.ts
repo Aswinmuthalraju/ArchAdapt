@@ -1,4 +1,4 @@
-import { RoomType, StructuredDesignJSON } from '@/types/architectural';
+import { DesignIntent, RoomType, StructuredDesignJSON } from '@/types/architectural';
 import { ROOM_TYPE_SPECS, inferRoomType, isBedroomType } from './roomTypes';
 import { designCells, exteriorSegments, planCompass, sharedEdge, PlanCell } from '@/lib/geometry/planGeometry';
 import { validateFloorPlan } from './validateFloorPlan';
@@ -43,6 +43,9 @@ export interface QualityMetrics {
   /** Share of upper-floor wall length that sits on a ground-floor wall line. */
   structuralStacking: number;
   totalBuiltUpAreaSqFt: number;
+  /** Share of the client's stated adjacency/privacy wishes that the plan honours (1 when none were stated). */
+  intentSatisfaction: number;
+  intentChecked: number;
   /** Sun-facing wall length of bedrooms, living and kitchen weighted by how hot that compass side is, per 100 sq ft of those rooms. Only judged in warm climates. */
   solarLoad: number;
 }
@@ -62,7 +65,7 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 const HEAT: Record<string, number> = { N: 0, NE: 0, E: 1, NW: 2, SE: 2, S: 3, W: 5, SW: 5 };
 
-export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: boolean } = {}): QualityReport {
+export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: boolean; intent?: DesignIntent } = {}): QualityReport {
   const report = validateFloorPlan(design);
   const cells = designCells(design);
   const byId = new Map(cells.map((c) => [c.id, c]));
@@ -218,6 +221,25 @@ export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: bo
     heatArea += r.cell.rect.w * r.cell.rect.d;
     for (const seg of exteriorSegments(r.cell, floorCells(r.cell.floor))) if (!seg.facesOpenSpace) heat += seg.length * (HEAT[compass[seg.side]] ?? 2);
   }
+  // ---- The client's own stated wishes ----
+  let intentChecked = 0;
+  let intentScore = 0;
+  for (const link of options.intent?.adjacency || []) {
+    const as = rooms.filter((r) => r.room.id === link.a || r.type === link.a);
+    const bs = rooms.filter((r) => r.room.id === link.b || r.type === link.b);
+    for (const a of as) {
+      const options2 = bs.filter((b) => b !== a && b.cell.floor === a.cell.floor);
+      if (!options2.length) continue;
+      const kind = link.kind || 'adj';
+      const share = (b: typeof a) => sharedEdge(a.cell.rect, b.cell.rect)?.length ?? 0;
+      const dist = (b: typeof a) => Math.hypot(a.cell.rect.x + a.cell.rect.w / 2 - b.cell.rect.x - b.cell.rect.w / 2, a.cell.rect.y + a.cell.rect.d / 2 - b.cell.rect.y - b.cell.rect.d / 2);
+      const weight = link.weight / 10;
+      intentChecked += weight;
+      if (kind === 'adj') intentScore += weight * (options2.some((b) => share(b) >= 2.5) ? 1 : 0);
+      else if (kind === 'near') intentScore += weight * (options2.some((b) => share(b) > 0 || dist(b) <= 18) ? 1 : 0);
+      else intentScore += weight * (options2.every((b) => share(b) < 2) ? 1 : 0);
+    }
+  }
   const solarLoad = heatArea ? (heat / heatArea) * 100 : 0;
   const metrics: QualityMetrics = {
     valid: report.isValid,
@@ -246,7 +268,9 @@ export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: bo
     wetStacked: upperBaths.length ? stackedBaths / upperBaths.length : 1,
     structuralStacking: stackTotal ? stackOn / stackTotal : 1,
     totalBuiltUpAreaSqFt: design.totalBuiltUpAreaSqFt,
-    solarLoad
+    solarLoad,
+    intentSatisfaction: intentChecked ? intentScore / intentChecked : 1,
+    intentChecked
   };
 
   const parts: QualityReport['parts'] = [];
@@ -262,7 +286,9 @@ export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: bo
   part('services', 'Plumbing & structure', 14, clamp01(1 - Math.max(0, metrics.wetClusterDistance - 10) / 25) * 0.3 + metrics.wetStacked * 0.15 + metrics.structuralStacking * 0.3 + clamp01(1 - Math.max(0, metrics.wallLinesPerRoom - 1.4) / 1.2) * 0.25,
     `wet rooms ${metrics.wetClusterDistance.toFixed(0)} ft apart, ${(metrics.wetStacked * 100).toFixed(0)}% baths stacked, ${(metrics.structuralStacking * 100).toFixed(0)}% walls stacked, ${metrics.wallLinesPerRoom.toFixed(1)} wall lines per room`);
   part('solar', 'Sun & orientation', 10, options.hot ? 1 - clamp01((metrics.solarLoad - 8) / 22) : 1, options.hot ? `heat-weighted sun-facing wall ${metrics.solarLoad.toFixed(0)} per 100 sq ft of bedrooms, living and kitchen` : 'not judged (temperate climate)');
+  if (intentChecked > 0) part('intent', 'Your stated wishes', 12, metrics.intentSatisfaction, `${(metrics.intentSatisfaction * 100).toFixed(0)}% of the adjacency and privacy wishes from your notes are honoured`);
   const total = parts.reduce((s, p) => s + p.weight, 0);
-  const raw = parts.reduce((s, p) => s + p.weight * p.score, 0) / total;
+  parts.forEach((p) => { p.weight = Math.round((p.weight / total) * 1000) / 10; });
+  const raw = parts.reduce((s, p) => s + p.weight * p.score, 0) / 100;
   return { score: report.isValid ? Math.round(raw * 1000) / 10 : 0, metrics, parts };
 }

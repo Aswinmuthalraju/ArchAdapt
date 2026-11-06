@@ -94,4 +94,10 @@ export interface EnergyCtx {
   typeAffinity?: Record<string, number>;
   /** Multiplies the cost of hard-rule violations (too small, unreachable, not enclosed) during repair passes. */
   hardBoost?: number;
+  /** Where each room used to be (by id). Rooms are pulled back toward these positions so an edit does not make rooms jump. */
+  anchors?: Map<string, Rect>;
+  /** Cost per foot of displacement from the anchor (default 0.18). */
+  stayWeight?: number;
+  /** Rooms that are meant to change (their anchor is only a weak pull). */
+  freeIds?: Set<string>;
 }
