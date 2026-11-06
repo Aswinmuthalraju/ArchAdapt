@@ -124,3 +124,4 @@ The baseline codebase has a solid TypeScript foundation, zero compilation or lin
 3. **Surgical What-If Mutations:** Enabling localized geometric alterations that preserve unaffected rooms and plot alignments.
 4. **Professional 2D Drafting Enhancements:** Graphic scale bar, dual-unit room tags, architectural dimension lines, door jamb details, and title block integration.
 5. **Plot Geometry Flexibility:** Enhanced plot utilization supporting corner plots, L-shaped footprints, and articulated setbacks.
+

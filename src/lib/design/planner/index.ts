@@ -75,8 +75,8 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
     bandResult.design.plot.roadEdges = site.roadEdges;
     bandResult.design.buildableAreaSqFt = Math.round(env.buildableArea);
   }
-  // An edit that must keep rooms where they are skips the band solver, which knows nothing about the old positions.
-  if (bandResult.ok && !options.anchors) {
+  // The band solver is considered for all layouts; when anchors are present, moved(r) scores room retention.
+  if (bandResult.ok) {
     consider('band', 'Zoned bands', 'Living at the road, a circulation band in the middle with the stair, bedrooms behind. Reliable and economical.', 'band-solver', bandResult);
   }
   // ARCHADAPT_PLANNER=band switches the optimiser off (feasibility sweeps, latency-critical deployments).
@@ -103,7 +103,13 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
   // An archetype the client's words point to gets a small, disclosed head start (never enough to beat an invalid or clearly worse plan).
   const favoured = new Set((options.intent?.preferredArchetypes || []).filter((id) => id in ARCHETYPES));
   const FAVOUR = 2.5;
-  const rankScore = (r: RankedPlan) => r.quality.score + (favoured.has(r.id) ? FAVOUR : 0);
+  const rankScore = (r: RankedPlan) => {
+    let score = r.quality.score + (favoured.has(r.id) ? FAVOUR : 0);
+    if (constraints.modes.includes('budget_first')) {
+      score -= (r.success.design.totalBuiltUpAreaSqFt / 100) * 1.2;
+    }
+    return score;
+  };
   // When editing, a plan that keeps rooms where they were is worth more than a slightly better-scoring rearrangement.
   const moved = (r: RankedPlan) => {
     if (!options.anchors) return 0;

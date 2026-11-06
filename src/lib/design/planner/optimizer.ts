@@ -9,6 +9,7 @@ import { validateFloorPlan } from '@/lib/design/validateFloorPlan';
 import { HARD_TERMS, layoutEnergy } from './energy';
 import { ARCHETYPES, ArchId, Archetype, EnergyCtx, FixedCell, PRoom, PairSpec } from './model';
 import { Rng, SNode, Sizing, insertBeside, isLeaf, leafIds, mulberry32, mutate, realize, seedTree, subtractRects, treeFromRects } from './slicing';
+import { styleBlueprint } from '@/lib/design/styleBlueprints';
 
 
 export interface OptimizeOptions {
@@ -48,8 +49,8 @@ const MAX_ASPECT: Partial<Record<RoomType, number>> = {
 };
 const GROW_EXPONENT = (type: RoomType): number => (['living', 'dining', 'kitchen', 'master_bedroom', 'bedroom', 'guest_room', 'study', 'lounge', 'courtyard'].includes(type) ? 1 : ['balcony', 'terrace', 'parking', 'stair', 'passage'].includes(type) ? 0 : 0.5);
 const GROW_CAP: Partial<Record<RoomType, number>> = {
-  living: 380, dining: 250, kitchen: 205, master_bedroom: 310, bedroom: 225, guest_room: 205, lounge: 260, study: 180,
-  entrance: 120, puja: 60, store: 60, utility: 80, bathroom: 60, dressing: 70, courtyard: 220
+  living: 450, dining: 250, kitchen: 210, master_bedroom: 350, bedroom: 260, guest_room: 230, lounge: 220, study: 180,
+  entrance: 135, puja: 65, store: 65, utility: 80, bathroom: 70, dressing: 80, courtyard: 220
 };
 const COVERAGE = (plot: number) => (plot <= 1500 ? 0.65 : plot <= 2500 ? 0.55 : plot <= 5000 ? 0.44 : plot <= 8000 ? 0.38 : plot <= 15000 ? 0.32 : 0.28);
 const snap = (v: number) => Math.round(v * 2) / 2;
@@ -415,11 +416,12 @@ function sizeProgram(plan: Plan, env: Envelope, constraints: DesignConstraints, 
     return Math.max(...Array.from({ length: floors }, (_, f) => floorSum(f, (r) => r.target) + reservedOnUpper(f)));
   };
   const desired = Math.min(cap, plotArea * COVERAGE(plotArea) * 0.82);
-  const growthLimit = plotArea <= 3000 ? 1.28 : plotArea <= 8000 ? 1.6 : 2.0;
+  const growthBias = (styleBlueprint(constraints.style)?.growthBias ?? 1) * (constraints.modes.includes('budget_first') ? 0.4 : 1);
+  const growthLimit = (plotArea <= 3000 ? 1.28 : plotArea <= 8000 ? 1.6 : 2.2) * (0.5 + 0.5 * growthBias);
   let g = 1;
   const baseNeed = groundNeed(1);
-  if (baseNeed < desired * 0.85) {
-    let lo = 1, hi = growthLimit * (constraints.budgetRange === 'Luxury' || constraints.budgetRange === 'Premium' ? 1.1 : 1);
+  if (baseNeed < desired * 0.85 && growthBias > 0.45) {
+    let lo = 1, hi = Math.max(1, growthLimit * (constraints.budgetRange === 'Luxury' || constraints.budgetRange === 'Premium' ? 1.1 : 1));
     for (let i = 0; i < 14; i++) { const mid = (lo + hi) / 2; if (groundNeed(mid) <= desired) lo = mid; else hi = mid; }
     g = lo;
   }

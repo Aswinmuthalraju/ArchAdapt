@@ -229,30 +229,39 @@ function groundCoverage(cells: Cell[], plotArea: number): number {
 const overlaps = (a: Rect, b: Rect) => Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0.06 && Math.min(a.y + a.d, b.y + b.d) - Math.max(a.y, b.y) > 0.06;
 
 /**
- * The most natural way to enlarge a ground-floor room that has an outside wall: push that wall outward into the plot.
- * Nothing else moves. Only offered when the new strip fits the buildable outline and the plot keeps its open land.
+ * The most natural way to enlarge a room that has an outside wall: push that wall outward into the plot.
+ * Nothing else moves. Offered when the new strip fits the buildable outline and structural envelope.
  */
 function planExtensions(target: Cell, cells: Cell[], deltaArea: number, env: Envelope, plotArea: number): { dir: Dir; t: number; rect: Rect }[] {
-  if (target.floor !== 0 || deltaArea <= 0 || FIXED_TYPES.includes(target.type)) return [];
+  if (deltaArea <= 0 || FIXED_TYPES.includes(target.type)) return [];
   const out: { dir: Dir; t: number; rect: Rect; cost: number }[] = [];
   const r = target.rect;
+  const isGround = target.floor === 0;
   for (const dir of ['left', 'right', 'front', 'rear'] as Dir[]) {
     const vertical = dir === 'left' || dir === 'right';
     const cross = vertical ? r.d : r.w;
-    const t = Math.min(Math.ceil((deltaArea / cross) * 2) / 2, 14);
-    if (t < 0.5) continue;
-    const strip: Rect = dir === 'left' ? { x: r.x - t, y: r.y, w: t, d: r.d } : dir === 'right' ? { x: r.x + r.w, y: r.y, w: t, d: r.d } : dir === 'front' ? { x: r.x, y: r.y - t, w: r.w, d: t } : { x: r.x, y: r.y + r.d, w: r.w, d: t };
-    if (cells.some((c) => c !== target && c.floor === 0 && overlaps(c.rect, strip))) continue;
-    // The whole side must be an outside wall (nothing touches it).
-    if (cells.some((c) => c !== target && c.floor === 0 && c.type !== 'void' && sharedEdge(r, c.rect) && ((vertical && Math.abs((dir === 'left' ? c.rect.x + c.rect.w : c.rect.x) - (dir === 'left' ? r.x : r.x + r.w)) < 0.06) || (!vertical && Math.abs((dir === 'front' ? c.rect.y + c.rect.d : c.rect.y) - (dir === 'front' ? r.y : r.y + r.d)) < 0.06)))) continue;
-    if (!env.fits({ x: strip.x + 0.05, y: strip.y + 0.05, w: strip.w - 0.1, d: strip.d - 0.1 })) continue;
-    const grown = { ...r };
-    if (dir === 'left') { grown.x -= t; grown.w += t; } else if (dir === 'right') grown.w += t; else if (dir === 'front') { grown.y -= t; grown.d += t; } else grown.d += t;
-    // Keep proportions sensible and the garden intact.
-    if (Math.max(grown.w, grown.d) / Math.min(grown.w, grown.d) > maxAspectOf(target.type) + 0.2) continue;
-    if (groundCoverage(cells, plotArea) + (strip.w * strip.d) / plotArea > coverageLimit(plotArea)) continue;
-    // Prefer growing toward the rear or sides over the road frontage, and keep side setbacks generous.
-    out.push({ dir, t, rect: grown, cost: (dir === 'front' ? 3 : 0) + t * 0.1 });
+    const maxT = Math.min(Math.ceil((deltaArea / cross) * 2) / 2, isGround ? 14 : 3.5);
+    for (let t = maxT; t >= 0.5; t = round2(t - 0.5)) {
+      if (t * cross < Math.min(deltaArea * 0.4, 15) && t < maxT) break;
+      const strip: Rect = dir === 'left' ? { x: round2(r.x - t), y: r.y, w: t, d: r.d } : dir === 'right' ? { x: round2(r.x + r.w), y: r.y, w: t, d: r.d } : dir === 'front' ? { x: r.x, y: round2(r.y - t), w: r.w, d: t } : { x: r.x, y: round2(r.y + r.d), w: r.w, d: t };
+      if (cells.some((c) => c !== target && c.floor === target.floor && overlaps(c.rect, strip))) continue;
+      // The whole side must be an outside wall on this floor (nothing touches it).
+      if (cells.some((c) => c !== target && c.floor === target.floor && c.type !== 'void' && sharedEdge(r, c.rect) && ((vertical && Math.abs((dir === 'left' ? c.rect.x + c.rect.w : c.rect.x) - (dir === 'left' ? r.x : r.x + r.w)) < 0.06) || (!vertical && Math.abs((dir === 'front' ? c.rect.y + c.rect.d : c.rect.y) - (dir === 'front' ? r.y : r.y + r.d)) < 0.06)))) continue;
+      if (!env.fits({ x: strip.x + 0.05, y: strip.y + 0.05, w: strip.w - 0.1, d: strip.d - 0.1 })) continue;
+      // On upper floors: must be supported by ground-floor room underneath or be a safe structural cantilever (<= 3.5 ft).
+      if (!isGround && t > 3.5 && !cells.some((c) => c.floor === 0 && overlaps(c.rect, strip))) continue;
+      const grown = { ...r };
+      if (dir === 'left') { grown.x = round2(grown.x - t); grown.w = round2(grown.w + t); }
+      else if (dir === 'right') grown.w = round2(grown.w + t);
+      else if (dir === 'front') { grown.y = round2(grown.y - t); grown.d = round2(grown.d + t); }
+      else grown.d = round2(grown.d + t);
+      // Keep proportions sensible and the garden intact.
+      if (Math.max(grown.w, grown.d) / Math.min(grown.w, grown.d) > maxAspectOf(target.type) + 0.2) continue;
+      if (isGround && groundCoverage(cells, plotArea) + (strip.w * strip.d) / plotArea > coverageLimit(plotArea)) continue;
+      // Prefer growing toward the rear or sides over the road frontage.
+      out.push({ dir, t, rect: grown, cost: (dir === 'front' ? 3 : 0) + (maxT - t) * 0.4 + t * 0.1 });
+      break;
+    }
   }
   return out.sort((a, b) => a.cost - b.cost);
 }
@@ -295,6 +304,83 @@ function pRoomOf(cell: Cell): PRoom {
     return p;
   }
   return derived(cell.id, cell.name, cell.type, cell.floor, area(cell.rect), { attachedTo: cell.room?.attachedTo, relationships: cell.room?.relationships || [] });
+}
+
+interface CarveOption {
+  donor: Cell;
+  donorRect: Rect;
+  newRect: Rect;
+  cost: number;
+}
+
+/** Carves a new room cleanly from an oversized room on the same floor, leaving every other room untouched. */
+function planCarve(room: PRoom, anchor: Cell | undefined, cells: Cell[], floor: number): CarveOption[] {
+  const options: CarveOption[] = [];
+  const targetArea = Math.max(room.minArea, room.target);
+  const onFloor = cells.filter((c) => c.floor === floor && c.type !== 'void');
+  const eligible = onFloor.filter((c) => !FIXED_TYPES.includes(c.type) && c.type !== 'parking' && c.type !== 'entrance');
+
+  for (const donor of eligible) {
+    const dRect = donor.rect;
+    const dSpec = ROOM_TYPE_SPECS[donor.type];
+    const dArea = dRect.w * dRect.d;
+    if (dArea - targetArea < dSpec.minArea * 0.98) continue;
+
+    // Vertical split: left or right
+    for (const side of ['left', 'right'] as const) {
+      const wantW = Math.ceil((targetArea / dRect.d) * 2) / 2;
+      const minW = Math.max(room.minSide, Math.ceil((room.minArea / dRect.d) * 2) / 2);
+      for (let newW = wantW; newW >= minW; newW = round2(newW - 0.5)) {
+        const donorW = round2(dRect.w - newW);
+        if (donorW < dSpec.minSide || donorW * dRect.d < dSpec.minArea) continue;
+        const newRect: Rect = side === 'left'
+          ? { x: dRect.x, y: dRect.y, w: newW, d: dRect.d }
+          : { x: round2(dRect.x + donorW), y: dRect.y, w: newW, d: dRect.d };
+        const donorRect: Rect = side === 'left'
+          ? { x: round2(dRect.x + newW), y: dRect.y, w: donorW, d: dRect.d }
+          : { x: dRect.x, y: dRect.y, w: donorW, d: dRect.d };
+
+        if (anchor && anchor.id !== donor.id) {
+          const edge = sharedEdge(newRect, anchor.rect);
+          if (!edge || edge.length < 2.5) continue;
+        }
+        if (Math.max(newRect.w, newRect.d) / Math.min(newRect.w, newRect.d) > maxAspectOf(room.type) + 0.3) continue;
+        if (Math.max(donorRect.w, donorRect.d) / Math.min(donorRect.w, donorRect.d) > maxAspectOf(donor.type) + 0.3) continue;
+
+        const cost = (donor.type === 'terrace' ? 0.1 : donor.type === 'lounge' ? 0.3 : donor.type === 'living' ? 0.6 : 1.2) + (anchor && anchor.id === donor.id ? 0.4 : 0);
+        options.push({ donor, donorRect, newRect, cost });
+        break;
+      }
+    }
+
+    // Horizontal split: front or rear
+    for (const side of ['front', 'rear'] as const) {
+      const wantD = Math.ceil((targetArea / dRect.w) * 2) / 2;
+      const minD = Math.max(room.minSide, Math.ceil((room.minArea / dRect.w) * 2) / 2);
+      for (let newD = wantD; newD >= minD; newD = round2(newD - 0.5)) {
+        const donorD = round2(dRect.d - newD);
+        if (donorD < dSpec.minSide || donorD * dRect.w < dSpec.minArea) continue;
+        const newRect: Rect = side === 'front'
+          ? { x: dRect.x, y: dRect.y, w: dRect.w, d: newD }
+          : { x: dRect.x, y: round2(dRect.y + donorD), w: dRect.w, d: newD };
+        const donorRect: Rect = side === 'front'
+          ? { x: dRect.x, y: round2(dRect.y + newD), w: dRect.w, d: donorD }
+          : { x: dRect.x, y: dRect.y, w: dRect.w, d: donorD };
+
+        if (anchor && anchor.id !== donor.id) {
+          const edge = sharedEdge(newRect, anchor.rect);
+          if (!edge || edge.length < 2.5) continue;
+        }
+        if (Math.max(newRect.w, newRect.d) / Math.min(newRect.w, newRect.d) > maxAspectOf(room.type) + 0.3) continue;
+        if (Math.max(donorRect.w, donorRect.d) / Math.min(donorRect.w, donorRect.d) > maxAspectOf(donor.type) + 0.3) continue;
+
+        const cost = (donor.type === 'terrace' ? 0.1 : donor.type === 'lounge' ? 0.3 : donor.type === 'living' ? 0.6 : 1.2) + (anchor && anchor.id === donor.id ? 0.4 : 0);
+        options.push({ donor, donorRect, newRect, cost });
+        break;
+      }
+    }
+  }
+  return options.sort((a, b) => a.cost - b.cost);
 }
 
 /**
@@ -599,6 +685,19 @@ export function attemptSurgery(request: SurgeryRequest): SurgeryResult {
           break;
         }
         if (chosen) { placedOn = 0; break; }
+      }
+      if (!chosen) {
+        for (const carve of planCarve(newRoom, anchor, cells, floor)) {
+          const cell: Cell = { id: newRoom.id, name: newRoom.name, type: newRoom.type, floor, rect: carve.newRect, room: null, program: newRoom.ref };
+          const trial = cells.map((c) => (c.id === carve.donor.id ? { ...c, rect: carve.donorRect } : c)).concat(cell);
+          const probe = rebuild(request, trial, []);
+          if (!probe || !validateFloorPlan(probe).isValid) continue;
+          cells = trial;
+          chosen = [carve.donor];
+          notes.push(`${added.name} was created by taking space from ${carve.donor.name}; all other rooms remained exactly where they were.`);
+          break;
+        }
+        if (chosen) { placedOn = floor; break; }
       }
       const seeds = anchor ? [anchor] : [...pool].sort((a, b) => spare(b) - spare(a)).slice(0, 4);
       for (const seed of seeds) {

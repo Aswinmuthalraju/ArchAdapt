@@ -345,10 +345,25 @@ export function interpretRequestLocally(message: string, program: DesignProgram,
   const moveMatch = text.match(/\b(move|shift|relocate|put|place)\b/);
   if (moveMatch) {
     const target = program.rooms.find((room) => room.type === type);
-    if (!target) return null;
+    if (!target) {
+      return {
+        understood: false,
+        summary: `There is no ${type.replace('_', ' ')} in this plan to move. Add a ${type.replace('_', ' ')} first, or select a room currently in the design.`,
+        tradeOffs: [],
+        ops: []
+      };
+    }
     const after = text.split(/next to|beside|adjacent to|near/)[1];
     const otherType = after ? findRoomType(after) : null;
     const other = otherType ? program.rooms.find((room) => room.type === otherType && room.id !== target.id) : undefined;
+    if (after && otherType && !other) {
+      return {
+        understood: false,
+        summary: `There is no ${otherType.replace('_', ' ')} in this plan to move ${target.name} next to.`,
+        tradeOffs: [],
+        ops: []
+      };
+    }
     const band: PlanBand | undefined = /\bfront\b/.test(text) ? 'front' : /\b(rear|back)\b/.test(text) ? 'rear' : undefined;
     const side: PlanSide | undefined = /\bleft\b/.test(text) ? 'left' : /\bright\b/.test(text) ? 'right' : undefined;
     if (!other && floor === undefined && !band && !side) return null;

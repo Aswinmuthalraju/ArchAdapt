@@ -144,3 +144,4 @@ All modifications to `PlanSvg.tsx` and 3D components are strictly backward compa
   ```
 - All new features (scale bars, interior witness dimension lines, dual unit tags, interactive room picking) are conditioned on active props (`showScaleBar = true`, `showDimensions = true`, `interactive = true`), defaulting to clean rendering when these props are omitted or disabled.
 - Therefore, the landing page hero plan, style illustrations, and showcases remain completely unchanged and visually identical to the verified baseline.
+

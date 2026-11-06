@@ -141,9 +141,9 @@ export function layoutEnergy(ctx: EnergyCtx, rects: Rect[], parts?: EnergyBreakd
       if (ratio > 1.5 && w >= 0.8) add('area', (ratio - 1.5) ** 2 * 6 * w);
       const comfort = COMFORT_SIDE[room.type];
       if (comfort && short < comfort) add('comfort', (comfort - short) * 0.7);
-      if (area < room.minArea) add('minArea', ((room.minArea - area) / room.minArea) * 40);
+      if (area < room.minArea) add('minArea', ((room.minArea - area) / room.minArea) * 50 + ((room.minArea - area) / room.minArea) ** 2 * 80);
     }
-    if (short < room.minSide) add('minSide', (room.minSide - short) * 14);
+    if (short < room.minSide) add('minSide', (room.minSide - short) * 30 + ((room.minSide - short) / room.minSide) ** 2 * 60);
     if (room.type === 'parking' && long < 15.2) add('minSide', (15.2 - long) * 10);
     if (room.type !== 'passage' && room.type !== 'stair' && long / short > room.maxAspect) add('aspect', (long / short - room.maxAspect) * 9 + (long / short - room.maxAspect) ** 2 * 6);
     if (room.type === 'stair') {

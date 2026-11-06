@@ -129,7 +129,7 @@ export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: bo
     const area = w * d;
     if (!r.room.derived && (area < spec.minArea * 0.9 || Math.min(w, d) < spec.minSide - 0.3)) undersized.push(r.room.name);
     if (spec.habitable && Math.max(w, d) / Math.min(w, d) > 2.1) elongated.push(r.room.name);
-    if (spec.habitable && area > spec.targetArea * 1.9) oversized.push(r.room.name);
+    if (spec.habitable && area > spec.targetArea * 2.25) oversized.push(r.room.name);
     if ((r.type === 'terrace' || r.type === 'balcony') && r.cell.floor > 0) openArea += area;
     if (!['parking', 'courtyard', 'terrace', 'balcony', 'entrance'].includes(r.type)) {
       enclosedArea += area;

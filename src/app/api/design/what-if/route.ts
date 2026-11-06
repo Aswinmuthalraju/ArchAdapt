@@ -215,22 +215,48 @@ export async function POST(request: Request) {
     let versionId: string | null = null;
     let persistError: string | null = null;
     if (canPersist && nextVersionNumber !== null) {
-      const { data: row, error } = await supabase
-        .from('floor_plan_versions')
-        .insert({
-          project_id: projectId,
-          version_number: nextVersionNumber,
-          title,
-          structured_design: newDesign,
-          rationale: newDesign.rationale || summary,
-          trade_offs: tradeOffs,
-          parent_version_id: parentVersionId,
-          created_by_prompt: message
-        })
-        .select('id')
-        .single();
-      if (error || !row) {
-        persistError = error?.message || 'The new version could not be saved.';
+      let insertVersion = nextVersionNumber;
+      let row: { id: string } | null = null;
+      let lastErr: any = null;
+      for (let retries = 0; retries < 3; retries++) {
+        const res = await supabase
+          .from('floor_plan_versions')
+          .insert({
+            project_id: projectId,
+            version_number: insertVersion,
+            title,
+            structured_design: newDesign,
+            rationale: newDesign.rationale || summary,
+            trade_offs: tradeOffs,
+            parent_version_id: parentVersionId,
+            created_by_prompt: message
+          })
+          .select('id')
+          .single();
+        if (!res.error && res.data) {
+          row = res.data;
+          nextVersionNumber = insertVersion;
+          lastErr = null;
+          break;
+        }
+        lastErr = res.error;
+        // On duplicate version_number collision, fetch latest version number and retry
+        if (res.error?.code === '23505' || /duplicate|unique|conflict/i.test(res.error?.message || '')) {
+          const { data: latest } = await supabase
+            .from('floor_plan_versions')
+            .select('version_number')
+            .eq('project_id', projectId)
+            .order('version_number', { ascending: false })
+            .limit(1);
+          if (latest && latest[0]) {
+            insertVersion = latest[0].version_number + 1;
+            continue;
+          }
+        }
+        break;
+      }
+      if (lastErr || !row) {
+        persistError = lastErr?.message || 'The new version could not be saved.';
         console.warn('[ARCHADAPT What-If] version not saved:', persistError);
       } else {
         versionId = row.id;

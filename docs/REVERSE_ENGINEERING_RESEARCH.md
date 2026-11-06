@@ -83,3 +83,4 @@ By studying observable frontend behavior in leading CAD, WebGL, and BIM platform
 2. **Elevate 3D to an Interactive CAD Experience:** Add interactive room selection, hover tooltips, hardware section cutaways, and camera presets.
 3. **Elevate 2D to an Architectural Blue-Print Standard:** Add graphic scale bars, room dimension strings, wall poche fills, and dual-unit room tags.
 4. **Make What-If Contextual & Surgical:** When a user selects a room and says "Expand this by 20%", apply localized geometric scaling that preserves unaffected rooms.
+

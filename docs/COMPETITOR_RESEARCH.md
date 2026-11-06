@@ -159,3 +159,4 @@ Architectural software has bifurcated into two polar extremes:
 | **Professional 2D Drafting** | ✓ | ✓ | ✗ | Partial | Partial | Partial | **✓ (Scale Bar, Poche, Dims)** |
 | **Consumer Accessibility** | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | **✓ (Homeowner Friendly)** |
 | **Zero-Install Web App** | ✗ | ✗ | ✓ | ✗ | ✓ | ✓ | **✓ (Next.js / WebGL)** |
+
