@@ -39,7 +39,7 @@ export async function renderDesigns(items: { title: string; design: StructuredDe
     <h3 style="margin:14px 0 4px">${title}</h3><div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:nowrap">
     ${Array.from({ length: design.floorsCount }, (_, f) => `<div><div style="font-size:12px;color:#666">Floor ${f}</div>${floorSvg(design, f, scale)}</div>`).join('')}</div>`).join('')}</body></html>`;
   mkdirSync(dirname(file), { recursive: true });
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   await page.setContent(html);
   await page.screenshot({ path: file, fullPage: true });

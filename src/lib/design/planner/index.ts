@@ -105,6 +105,20 @@ export function planLayout(program: DesignProgram, site: SiteInfo, constraints: 
   const FAVOUR = 2.5;
   const rankScore = (r: RankedPlan) => {
     let score = r.quality.score + (favoured.has(r.id) ? FAVOUR : 0);
+    if (constraints.modes.includes('climate_adaptive')) {
+      // The mode's promise is the living room on the cooler side: a plan that breaks it cannot win on other points.
+      const side = program.rooms.find((room) => room.type === 'living')?.side;
+      const d = r.success.design;
+      const living = d.rooms.find((room) => room.roomType === 'living' && (room.position.floorLevel || 0) === 0);
+      const ground = d.rooms.filter((room) => (room.position.floorLevel || 0) === 0);
+      if (living && ground.length && (side === 'left' || side === 'right')) {
+        const minX = Math.min(...ground.map((room) => room.position.x));
+        const maxX = Math.max(...ground.map((room) => room.position.x + room.position.width));
+        const centre = living.position.x + living.position.width / 2;
+        const onSide = side === 'left' ? centre < (minX + maxX) / 2 : centre > (minX + maxX) / 2;
+        if (!onSide) score -= 8;
+      }
+    }
     if (constraints.modes.includes('budget_first')) {
       score -= (r.success.design.totalBuiltUpAreaSqFt / 100) * 1.2;
     }

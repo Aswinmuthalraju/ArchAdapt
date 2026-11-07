@@ -21,6 +21,8 @@ import { ROOM_TYPE_SPECS, floorName, isBedroomType } from './roomTypes';
 import { solveOpenings } from './openings';
 import { styleBlueprint } from './styleBlueprints';
 
+import { validateFloorPlan } from './validateFloorPlan';
+
 export interface LayoutSuccess {
   ok: true;
   design: StructuredDesignJSON;
@@ -299,11 +301,18 @@ export function layoutProgram(program: DesignProgram, site: SiteInfo, constraint
     { twoZone: false, policy: -1, lean: true, note: 'To fit the plot, rooms the planner marked as optional were left out and the bedroom passage was omitted where two rooms can open off the dining area.' },
     { twoZone: true, policy: -1, lean: true, note: 'To fit the plot, the plan uses two zones, and rooms the planner marked as optional were left out.' }
   ];
+  // An arrangement only counts when it passes the plan checks (structure, reachability, sizes); otherwise the next is tried.
+  const sound = (r: LayoutResult, final = false): LayoutResult => {
+    if (!r.ok) return r;
+    if (r.unreachable.length && !final) return r; // the passage pass below handles rooms reached through other rooms
+    const errors = validateFloorPlan(r.design).errors;
+    return errors.length ? { ok: false, reason: errors[0], violatedConstraints: errors } : r;
+  };
   let chosen = attempts[0];
-  let result = layoutOnce(program, site, constraints, chosen.policy, chosen.twoZone, chosen.lean);
+  let result = sound(layoutOnce(program, site, constraints, chosen.policy, chosen.twoZone, chosen.lean));
   const firstFailure = result;
   for (let i = 1; i < attempts.length && !result.ok; i++) {
-    const next = layoutOnce(program, site, constraints, attempts[i].policy, attempts[i].twoZone, attempts[i].lean);
+    const next = sound(layoutOnce(program, site, constraints, attempts[i].policy, attempts[i].twoZone, attempts[i].lean));
     if (next.ok) {
       next.notes.unshift(attempts[i].note!);
       next.design.layoutNotes = next.notes;
@@ -316,7 +325,7 @@ export function layoutProgram(program: DesignProgram, site: SiteInfo, constraint
   // A rear passage costs area, so it is only added where needed. If a room would otherwise be
   // reachable only through another room, lay out again with a passage rather than accept that.
   for (let policy = Math.max(1, chosen.policy + 1); policy <= 3 && result.ok && result.unreachable.length > 0; policy++) {
-    const retry = layoutOnce(program, site, constraints, policy, chosen.twoZone, chosen.lean);
+    const retry = sound(layoutOnce(program, site, constraints, policy, chosen.twoZone, chosen.lean));
     if (!retry.ok) continue;
     if (retry.unreachable.length < result.unreachable.length) {
       retry.notes.unshift(...result.notes.filter((note) => note === chosen.note));
@@ -325,7 +334,8 @@ export function layoutProgram(program: DesignProgram, site: SiteInfo, constraint
       result = retry;
     }
   }
-  return result;
+  const checked = sound(result, true);
+  return checked.ok ? result : checked;
 }
 
 function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignConstraints, passagePolicy: number, twoZone: boolean, lean = false): LayoutResult {
@@ -734,12 +744,39 @@ function layoutOnce(program: DesignProgram, site: SiteInfo, constraints: DesignC
         cursor = Math.max(cursor, block.rect.x + block.rect.w);
       }
       if (rangeEnd - cursor > 0.5) segments.push([cursor, rangeEnd]);
+      if (floor > 0) {
+        // An upper room must stand on the floor below: rooms or a columned porch, never open air or an open balcony.
+        // Clip this zone's building width to the stretches that have support underneath, so nothing hangs.
+        // A ground-floor sit-out is covered and columned, so it carries the floor above; an upper open terrace does not.
+        const NO_SUPPORT: RoomType[] = floor === 1 ? ['void', 'courtyard'] : ['void', 'courtyard', 'balcony', 'terrace'];
+        const below = placed.filter((p) => p.room.floor === floor - 1 && !NO_SUPPORT.includes(p.room.type));
+        // Sample across the zone every half foot: a stretch is supported when rooms below cover most of the zone's depth there.
+        const merged: [number, number][] = [];
+        for (let x = rangeStart; x < rangeEnd - 0.01; x += 0.5) {
+          const mid = x + 0.25;
+          const covered = below.filter((p) => p.rect.x <= mid && p.rect.x + p.rect.w >= mid)
+            .reduce((t, p) => t + Math.max(0, Math.min(p.rect.y + p.rect.d, y0 + depth) - Math.max(p.rect.y, y0)), 0);
+          if (covered < depth * 0.97) continue;
+          const last = merged[merged.length - 1];
+          if (last && Math.abs(last[1] - x) < 0.01) last[1] = Math.min(rangeEnd, x + 0.5);
+          else merged.push([x, Math.min(rangeEnd, x + 0.5)]);
+        }
+        const clipped: [number, number][] = [];
+        for (const [a, b] of segments) for (const [c, d] of merged) {
+          const lo = Math.max(a, c), hi = Math.min(b, d);
+          if (hi - lo > 0.5) clipped.push([lo, hi]);
+        }
+        segments.length = 0;
+        segments.push(...clipped);
+      }
 
       if (!units.length) {
         // Nothing planned here on this floor: the upper footprint steps in over the ground floor roof.
         continue;
       }
-      if (!segments.length) continue;
+      if (!segments.length) {
+        return { ok: false, reason: `The ${floorName(floor).toLowerCase()} rooms would have nothing under them in the ${band} zone, and an upper floor must stand on the floor below.`, violatedConstraints: ['Upper floor must be supported'] };
+      }
 
       const natural = units.map((unit) => unitWidth(unit, effDepth, band === 'front' ? porchSetbackUsage : 0));
       // The landing room must sit against the stair, so the segment touching the stair is filled first.

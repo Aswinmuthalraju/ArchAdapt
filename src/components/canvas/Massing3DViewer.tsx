@@ -511,31 +511,22 @@ export default function Massing3DViewer({ design, onAppearanceChange, selectedRo
             Cutaway {isCutaway ? 'on' : 'off'}
           </button>
 
-          {/* Camera View Presets */}
-          <div role="group" aria-label="Elevation & Camera Views" className="flex border border-plum-600 bg-plum-800 p-0.5">
-            {([
-              ['orbit', 'Orbit'],
-              ['front', 'Front'],
-              ['rear', 'Rear'],
-              ['left', 'Left'],
-              ['right', 'Right'],
-              ['top', 'Top'],
-              ['iso', 'Iso']
-            ] as const).map(([preset, label]) => (
-              <button
-                key={preset}
-                onClick={() => {
-                  setViewPreset(preset);
-                  setViewKey((k) => k + 1);
-                }}
-                aria-pressed={viewPreset === preset}
-                className={`px-2.5 py-1.5 text-xs transition-colors ${viewPreset === preset ? 'bg-gold-400 font-semibold text-plum-950' : 'text-stone-300 hover:text-gold-200'}`}
-                title={`Switch to ${label} view`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* Camera view: one compact control instead of a row of seven buttons */}
+          <label className={`${toolbarButton(viewPreset !== 'orbit')} relative cursor-pointer`} title="Camera view">
+            <Eye className="h-4 w-4" />
+            <span className="sr-only">Camera view</span>
+            <select
+              aria-label="Elevation & Camera Views"
+              value={viewPreset}
+              onChange={(e) => { setViewPreset(e.target.value as ViewPreset); setViewKey((k) => k + 1); }}
+              className="cursor-pointer appearance-none bg-transparent pr-1 text-inherit outline-none"
+            >
+              {([
+                ['orbit', 'Orbit'], ['walk', 'Walk-through'], ['front', 'Front elevation'], ['rear', 'Rear elevation'],
+                ['left', 'Left elevation'], ['right', 'Right elevation'], ['top', 'Top view'], ['iso', 'Isometric']
+              ] as const).map(([preset, label]) => <option key={preset} value={preset} className="bg-plum-900 text-stone-100">{label}</option>)}
+            </select>
+          </label>
 
           {/* Appearance Panel Toggle */}
           <button onClick={() => setIsAppearanceOpen((v) => !v)} aria-expanded={isAppearanceOpen} className={toolbarButton(isAppearanceOpen)}>

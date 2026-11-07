@@ -510,7 +510,6 @@ export default function WorkspacePage() {
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="scrollbar-plum hidden w-80 shrink-0 flex-col overflow-y-auto border-r border-plum-700 bg-plum-850 lg:flex">
-          <PlannerPanel design={activeDesign} />
           <section className="space-y-2 border-b border-plum-700 p-5">
             <h2 className={heading}>This version</h2>
             <dl>
@@ -547,6 +546,8 @@ export default function WorkspacePage() {
               ))}
             </section>
           )}
+
+          <PlannerPanel design={activeDesign} />
 
           <section className="border-b border-plum-700 p-5 space-y-3">
             <div className="flex items-center justify-between">

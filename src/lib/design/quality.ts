@@ -48,6 +48,12 @@ export interface QualityMetrics {
   intentChecked: number;
   /** Sun-facing wall length of bedrooms, living and kitchen weighted by how hot that compass side is, per 100 sq ft of those rooms. Only judged in warm climates. */
   solarLoad: number;
+  /** Share of upper-floor enclosed area that stands over ground-floor enclosed rooms (1 = no unsupported overhang). */
+  upperSupport: number;
+  /** Share of the ground-floor enclosed footprint that the floor above covers with enclosed rooms (not open terrace). */
+  upperCoverage: number;
+  /** Mean enclosed area / bounding-box area per floor: 1 is a clean rectangle, low is a ragged outline. */
+  outlineCompactness: number;
 }
 
 export interface QualityReport {
@@ -241,6 +247,40 @@ export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: bo
     }
   }
   const solarLoad = heatArea ? (heat / heatArea) * 100 : 0;
+
+  // ---- Massing: upper floors stand on the floor below, in a simple outline ----
+  // Load-bearing walls and column grids run straight down (Ching, Building Construction Illustrated; NBC 2016 Part 6),
+  // so an upper room should sit over a ground room, not over the car porch or open air, and the upper floor should
+  // use the footprint it is built on rather than float as a small box in one corner of it.
+  const OPEN_KINDS = ['parking', 'courtyard', 'terrace', 'balcony', 'entrance', 'void'];
+  const enclosedOn = (level: number) => floorCells(level).filter((c) => !OPEN_KINDS.includes(c.type));
+  const overlap = (a: PlanCell['rect'], b: PlanCell['rect']) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.d, b.y + b.d) - Math.max(a.y, b.y));
+  let supportedArea = 0, upperEnclosed = 0, coveredArea = 0, groundEnclosedArea = 0;
+  const groundEnclosed = enclosedOn(0);
+  groundEnclosed.forEach((c) => { groundEnclosedArea += c.rect.w * c.rect.d; });
+  for (let level = 1; level < floors; level++) {
+    const below = enclosedOn(level - 1);
+    for (const c of enclosedOn(level)) {
+      upperEnclosed += c.rect.w * c.rect.d;
+      supportedArea += below.reduce((s, b) => s + overlap(c.rect, b.rect), 0);
+    }
+  }
+  if (floors > 1) {
+    for (const c of enclosedOn(1)) coveredArea += groundEnclosed.reduce((s, b) => s + overlap(c.rect, b.rect), 0);
+  }
+  let compactTotal = 0, compactFloors = 0;
+  for (let level = 0; level < floors; level++) {
+    const cs = enclosedOn(level);
+    if (!cs.length) continue;
+    const minX = Math.min(...cs.map((c) => c.rect.x)), maxX = Math.max(...cs.map((c) => c.rect.x + c.rect.w));
+    const minY = Math.min(...cs.map((c) => c.rect.y)), maxY = Math.max(...cs.map((c) => c.rect.y + c.rect.d));
+    const box = (maxX - minX) * (maxY - minY);
+    compactTotal += box ? cs.reduce((s, c) => s + c.rect.w * c.rect.d, 0) / box : 1;
+    compactFloors++;
+  }
+  const upperSupport = upperEnclosed ? Math.min(1, supportedArea / upperEnclosed) : 1;
+  const upperCoverage = floors > 1 && groundEnclosedArea ? Math.min(1, coveredArea / groundEnclosedArea) : 1;
+  const outlineCompactness = compactFloors ? compactTotal / compactFloors : 1;
   const metrics: QualityMetrics = {
     valid: report.isValid,
     errors: report.errors,
@@ -270,7 +310,10 @@ export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: bo
     totalBuiltUpAreaSqFt: design.totalBuiltUpAreaSqFt,
     solarLoad,
     intentSatisfaction: intentChecked ? intentScore / intentChecked : 1,
-    intentChecked
+    intentChecked,
+    upperSupport,
+    upperCoverage,
+    outlineCompactness
   };
 
   const parts: QualityReport['parts'] = [];
@@ -286,6 +329,11 @@ export function evaluateDesign(design: StructuredDesignJSON, options: { hot?: bo
   part('services', 'Plumbing & structure', 14, clamp01(1 - Math.max(0, metrics.wetClusterDistance - 10) / 25) * 0.3 + metrics.wetStacked * 0.15 + metrics.structuralStacking * 0.3 + clamp01(1 - Math.max(0, metrics.wallLinesPerRoom - 1.4) / 1.2) * 0.25,
     `wet rooms ${metrics.wetClusterDistance.toFixed(0)} ft apart, ${(metrics.wetStacked * 100).toFixed(0)}% baths stacked, ${(metrics.structuralStacking * 100).toFixed(0)}% walls stacked, ${metrics.wallLinesPerRoom.toFixed(1)} wall lines per room`);
   part('solar', 'Sun & orientation', 10, options.hot ? 1 - clamp01((metrics.solarLoad - 8) / 22) : 1, options.hot ? `heat-weighted sun-facing wall ${metrics.solarLoad.toFixed(0)} per 100 sq ft of bedrooms, living and kitchen` : 'not judged (temperate climate)');
+  part('massing', 'Massing & stacking', 14,
+    (floors > 1 ? clamp01((metrics.upperSupport - 0.7) / 0.28) * 0.4 + clamp01((metrics.upperCoverage - 0.4) / 0.45) * 0.35 : 0.75) + clamp01((metrics.outlineCompactness - 0.7) / 0.27) * 0.25,
+    floors > 1
+      ? `${Math.round(metrics.upperSupport * 100)}% of upper rooms stand on rooms below, the upper floor covers ${Math.round(metrics.upperCoverage * 100)}% of the ground footprint, outline ${Math.round(metrics.outlineCompactness * 100)}% rectangular`
+      : `outline ${Math.round(metrics.outlineCompactness * 100)}% rectangular`);
   if (intentChecked > 0) part('intent', 'Your stated wishes', 12, metrics.intentSatisfaction, `${(metrics.intentSatisfaction * 100).toFixed(0)}% of the adjacency and privacy wishes from your notes are honoured`);
   const total = parts.reduce((s, p) => s + p.weight, 0);
   parts.forEach((p) => { p.weight = Math.round((p.weight / total) * 1000) / 10; });

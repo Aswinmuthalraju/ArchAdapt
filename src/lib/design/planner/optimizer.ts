@@ -542,15 +542,70 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
     const stairRect = stairIdx >= 0 ? ground.rects[stairIdx] : null;
     const courtRects = groundRooms.map((r, i) => (r.type === 'courtyard' ? { room: r, rect: ground.rects[i] } : null)).filter((x): x is { room: PRoom; rect: Rect } => !!x);
     const lines = groundLines(ground.rects, groundRooms);
+    // Open ground bays on the footprint edge (car porch, entrance porch) that the upper floor must not build over.
+    const porchRects = groundRooms
+      .map((r, i) => ((r.type === 'parking' || r.type === 'entrance') ? { room: r, rect: ground.rects[i] } : null))
+      .filter((x): x is { room: PRoom; rect: Rect } => !!x && x.rect.w >= 4 && x.rect.d >= 4);
     let ok = true;
-    const upperVoids: { name: string; rect: Rect }[][] = [];
+    const upperVoids: { name: string; rect: Rect; room: PRoom }[][] = [];
     for (let f = 1; f < floors && ok; f++) {
       const rooms = plan.rooms[f].map((r) => ({ ...r }));
       const blocks: FixedCell[] = [];
       if (stairRect) blocks.push({ room: derived(`room-stair-${f}`, 'Stair Landing', 'stair', f, STAIR_TARGET, { minArea: 60 }), rect: stairRect });
       courtRects.forEach((c, k) => blocks.push({ room: derived(`room-void-${f}-${k + 1}`, `Open to ${c.room.name} Below`, 'void', f, 0, { minArea: 0, minSide: 0 }), rect: c.rect }));
-      const roomsArea0 = sum(rooms.map((r) => r.target));
-      const boxes = upperBoxes(fpRect, stairRect, (roomsArea0 + (stairRect ? stairRect.w * stairRect.d : 0)) * 1.04);
+      // The roof slab of the car porch and entrance porch is used as the balcony / sit-out of the floor above (the usual
+      // Indian G+1 pattern). Rooms are never built over these open bays, so every upper room stands on walls below.
+      porchRects.forEach((c, k) => blocks.push({
+        room: derived(`room-porchroof-${f}-${k + 1}`, f === 1 ? (c.rect.w * c.rect.d >= 120 ? 'Balcony over Porch' : 'Balcony') : 'Open Terrace', f === 1 ? 'balcony' : 'terrace', f, c.rect.w * c.rect.d, { minArea: 0, minSide: 0, maxAspect: 12 }),
+        rect: c.rect
+      }));
+      // An upper floor is built on the ground floor's walls (load-bearing walls and columns run straight down), so it is
+      // planned on the whole footprint. Rooms grow into the space first; only what is still left becomes a terrace,
+      // instead of a small box of rooms floating in one corner of the roof slab.
+      const blockArea = sum(blocks.map((b) => b.rect.w * b.rect.d));
+      const usable = fpRect.w * fpRect.d - blockArea;
+      const GROW_LIMIT: Partial<Record<RoomType, number>> = { master_bedroom: 1.3, bedroom: 1.3, guest_room: 1.3, lounge: 1.45, study: 1.25, bathroom: 1.2, dressing: 1.2, store: 1.15, puja: 1.15, utility: 1.15 };
+      const porchOpen = sum(porchRects.map((c) => c.rect.w * c.rect.d));
+      const LEAVE_OPEN = porchOpen >= 60 ? 0 : Math.min(usable * 0.1, 100);
+      const baseTarget = new Map(rooms.map((r) => [r.id, r.target]));
+      let spare = usable - sum(rooms.map((r) => r.target)) - LEAVE_OPEN;
+      // First try: the whole footprint. If that fails a check (narrow houses, where filled floors chain bedrooms), retries
+      // fall back to a compact upper box that still lies inside the footprint, so nothing ever hangs past the floor below.
+      const fillFootprint = attempt === 0;
+      for (let pass = 0; fillFootprint && pass < 4 && spare > 8; pass++) {
+        const growable = rooms.filter((r) => (GROW_LIMIT[r.type] ?? 1) > 1 && r.target < baseTarget.get(r.id)! * (GROW_LIMIT[r.type] ?? 1) - 0.5);
+        const base = sum(growable.map((r) => r.target));
+        if (!base) break;
+        const factor = 1 + spare / base;
+        for (const r of growable) {
+          const cap = baseTarget.get(r.id)! * (GROW_LIMIT[r.type] ?? 1);
+          const next = Math.min(cap, r.target * factor);
+          spare -= next - r.target;
+          r.target = next;
+        }
+      }
+      let roomsArea0 = sum(rooms.map((r) => r.target));
+      if (fillFootprint && usable - roomsArea0 > 160) {
+        // Space the rooms cannot use becomes one terrace on the road side, beside the porch balcony: the familiar
+        // front sit-out of a G+1 house, not a strip through the middle or a dead slab at the back.
+        const frontBlocks = blocks.filter((b) => b.rect.y <= fpRect.y + 0.1).map((b) => [b.rect.x, b.rect.x + b.rect.w] as [number, number]).sort((a, b) => a[0] - b[0]);
+        const gaps: [number, number][] = [];
+        let cx = fpRect.x;
+        for (const [a, b] of frontBlocks) { if (a - cx > 0.5) gaps.push([cx, a]); cx = Math.max(cx, b); }
+        if (fpRect.x + fpRect.w - cx > 0.5) gaps.push([cx, fpRect.x + fpRect.w]);
+        const gap = gaps.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
+        if (gap && gap[1] - gap[0] >= 8) {
+          const w = gap[1] - gap[0];
+          let d = snap(Math.min(12, Math.max(5, (usable - roomsArea0) / w)));
+          for (const b of blocks) if (b.rect.x < gap[1] - 0.1 && b.rect.x + b.rect.w > gap[0] + 0.1 && b.rect.y > fpRect.y + 0.1) d = Math.min(d, b.rect.y - fpRect.y);
+          if (d >= 5) {
+            blocks.push({ room: derived(`room-terrace-${f}-front`, 'Open Terrace', 'terrace', f, w * d, { minArea: 0, minSide: 0, maxAspect: 12 }), rect: { x: gap[0], y: fpRect.y, w, d } });
+          }
+        }
+      }
+      const freeArea = fpRect.w * fpRect.d - sum(blocks.map((b) => b.rect.w * b.rect.d));
+      roomsArea0 = Math.min(roomsArea0, freeArea);
+      const boxes = fillFootprint && usable - roomsArea0 > 0 ? [fpRect] : upperBoxes(fpRect, stairRect, (roomsArea0 + (stairRect ? stairRect.w * stairRect.d : 0)) * 1.04);
       const insideBox = (box: Rect) => blocks.filter((b) => b.rect.x >= box.x - 0.01 && b.rect.y >= box.y - 0.01 && b.rect.x + b.rect.w <= box.x + box.w + 0.01 && b.rect.y + b.rect.d <= box.y + box.d + 0.01);
       const roofCost = (box: Rect) => (fpRect.w * fpRect.d - box.w * box.d) * 0.006;
       let chosen: { sol: FloorSolution; rooms: PRoom[]; box: Rect; score: number } | null = null;
@@ -560,7 +615,8 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
         const regionArea = sum(pieces.map((p) => p.w * p.d));
         const trial = rooms.map((r) => ({ ...r }));
         const leftover = regionArea - roomsArea0;
-        if (leftover > 90) trial.push(derived(`room-terrace-${f}-1`, 'Terrace', 'terrace', f, leftover * 0.96, { minArea: 12, minSide: 3, maxAspect: 8 }));
+        // What the rooms could not absorb becomes one terrace, kept toward the road, never a strip through the middle.
+        if (leftover > 160) trial.push(derived(`room-terrace-${f}-1`, 'Open Terrace', 'terrace', f, leftover * 0.96, { minArea: 12, minSide: 5, maxAspect: 5, hintY: 0 }));
         for (let k = trial.length; k < pieces.length; k++) trial.push(derived(`room-terrace-${f}-${k + 2}`, 'Terrace', 'terrace', f, pieces[k].w * pieces[k].d * 0.5, { minArea: 12, minSide: 3, maxAspect: 8 }));
         const pairs = pairsFor([...trial, ...inBox.map((b) => b.room)], opts.intent, tight);
         const ctx = ctxFor(box, trial, inBox, pairs, f, lines);
@@ -584,7 +640,7 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
       rectsByFloor[f] = sol.rects;
       roomsByFloor[f] = upperRooms;
       energyByFloor[f] = sol.energy;
-      upperVoids[f] = inBox.filter((b) => b.room.type === 'void').map((b) => ({ name: b.room.name, rect: b.rect }));
+      upperVoids[f] = inBox.filter((b) => b.room.type !== 'stair').map((b) => ({ name: b.room.name, rect: b.rect, room: b.room }));
       upperRooms.forEach((r, i) => { if (r.type === 'terrace' && r.derived && sol.rects[i].y <= chosen!.box.y + 0.1 && sol.rects[i].w >= 5) r.name = sol.rects[i].d <= 8.5 ? 'Balcony' : 'Open Terrace'; });
     }
     if (!ok) return { skip: `${arch.label}: an upper floor could not be arranged.` };
@@ -608,7 +664,7 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
       roomsByFloor[f].forEach((room, i) => addPlaced(room, rectsByFloor[f][i], order++));
       if (f > 0) {
         if (stairRect) addPlaced(derived(`room-stair-${f}`, 'Stair Landing', 'stair', f, STAIR_TARGET), stairRect, order++);
-        (upperVoids[f] || []).forEach((v, k) => addPlaced(derived(`room-void-${f}-${k + 1}`, v.name, 'void', f, 0), v.rect, order++));
+        (upperVoids[f] || []).forEach((v) => addPlaced(v.room, v.rect, order++));
       }
     }
     const assembled = assembleDesign({
@@ -644,6 +700,10 @@ export function optimizeLayouts(program: DesignProgram, site: SiteInfo, constrai
       const check = validateFloorPlan(out.cand.design);
       const open = courtyardOpenSide(out.cand.design);
       if (open) { rejected.push(`${arch.label} (try ${attempt + 1}): ${open}`); continue; }
+      // Filling a whole upper floor must not stretch rooms into strips; if it did, the next try uses a compact upper box.
+      const stretched = attempt === 0 && out.cand.design.rooms.some((r) => (r.position.floorLevel || 0) > 0 && ROOM_TYPE_SPECS[(r.roomType || 'bedroom') as RoomType]?.habitable
+        && (() => { const w = (r.position.width / 100) * plotWidth, d = (r.position.height / 100) * plotDepth; return Math.max(w, d) / Math.min(w, d) > 2.0 || Math.min(w, d) < 8.5; })());
+      if (stretched) { rejected.push(`${arch.label} (try ${attempt + 1}): filling the upper floor stretched a room into a strip`); continue; }
       if (check.isValid && out.cand.unreachable.length === 0) accepted = out.cand;
       else rejected.push(`${arch.label} (try ${attempt + 1}): ${check.errors[0] || `unreachable ${out.cand.unreachable.join(', ')}`}`);
     }

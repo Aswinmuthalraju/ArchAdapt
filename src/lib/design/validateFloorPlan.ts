@@ -131,6 +131,28 @@ export function validateFloorPlan(design: StructuredDesignJSON, expectedRequirem
   }
 
   // ---------- 3. Geometry ----------
+  // Structure: every upper room must stand on the floor below. Walls and columns run straight down to the
+  // foundation, so a room may sit over rooms or over a columned porch, never over open air or an open balcony.
+  // A balcony may cantilever up to 4 ft past the floor below (a normal RCC cantilever); a terrace may not.
+  const CANTILEVER = 4;
+  const NOT_SUPPORTING = new Set(['void', 'courtyard', 'balcony', 'terrace']);
+  for (let level = 1; level < floorsCount; level++) {
+    // Ground-floor sit-outs and porches are covered and columned, so they carry the floor above.
+    const below = cells.filter((cell) => cell.floor === level - 1 && (level === 1 ? cell.type !== 'void' && cell.type !== 'courtyard' : !NOT_SUPPORTING.has(cell.type)));
+    const belowAny = cells.filter((cell) => cell.floor === level - 1 && cell.type !== 'void' && cell.type !== 'courtyard');
+    for (const cell of cells.filter((c) => c.floor === level && c.type !== 'void' && c.type !== 'stair')) {
+      const area = cell.rect.w * cell.rect.d;
+      const open = cell.type === 'balcony' || cell.type === 'terrace';
+      const supported = (open ? belowAny : below).reduce((sum, b) => sum + rectOverlapArea(cell.rect, b.rect), 0);
+      const hanging = area - supported;
+      const allowed = cell.type === 'balcony' ? CANTILEVER * Math.max(cell.rect.w, cell.rect.d) : Math.max(3, area * 0.02);
+      if (hanging > allowed + 0.5) {
+        const name = design.rooms.find((r) => r.id === cell.id)?.name || cell.id;
+        fail('geometry', 'UNSUPPORTED_UPPER_ROOM', `${name} on the ${floorName(level).toLowerCase()} hangs over open space: ${Math.round(hanging)} sq ft of it has no room or column below.`);
+      }
+    }
+  }
+
   const setbacks = design.plot?.setbacks;
   // An irregular plot is checked against its real outline, not the bounding rectangle.
   const irregular = design.plot?.polygon && setbacks

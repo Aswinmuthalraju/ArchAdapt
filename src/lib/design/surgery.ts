@@ -388,7 +388,7 @@ function planCarve(room: PRoom, anchor: Cell | undefined, cells: Cell[], floor: 
  * Returns the new cells, or null when no valid arrangement exists for that region.
  */
 function resolveRegion(
-  design: StructuredDesignJSON, cells: Cell[], floor: number, movableIds: string[], newRooms: PRoom[], extraPairs: PairSpec[], hot: boolean, extraRegion: Rect[] = [], pinned: Record<string, number> = {}
+  design: StructuredDesignJSON, cells: Cell[], floor: number, movableIds: string[], newRooms: PRoom[], extraPairs: PairSpec[], hot: boolean, extraRegion: Rect[] = [], pinned: Record<string, number> = {}, maxResize = 0.4
 ): Cell[] | null {
   const movable = cells.filter((c) => movableIds.includes(c.id));
   if (movable.some((c) => FIXED_TYPES.includes(c.type))) return null;
@@ -493,7 +493,7 @@ function resolveRegion(
     const r = best.rects[i];
     const shift = Math.hypot(r.x + r.w / 2 - old.rect.x - old.rect.w / 2, r.y + r.d / 2 - old.rect.y - old.rect.d / 2);
     const resize = Math.abs(area(r) - area(old.rect)) / area(old.rect);
-    if (shift > 6.5 || resize > 0.4) return null;
+    if (shift > 6.5 || resize > maxResize) return null;
   }
   const next = cells.filter((c) => !movableIds.includes(c.id));
   rooms.forEach((r, i) => {
@@ -735,12 +735,16 @@ export function attemptSurgery(request: SurgeryRequest): SurgeryResult {
       const nearby = neighboursOf(gone, cells).filter((n) => !FIXED_TYPES.includes(n.type) && !removedIds.has(n.id));
       if (!nearby.length) return { ok: false, reason: `Nothing next to ${gone.name} can take over its space.` };
       const keep = cells.filter((c) => !removedIds.has(c.id));
-      const group = nearby.slice(0, 2);
-      const regionRects = [...freed.map((c) => c.rect), ...group.map((c) => c.rect)];
       // Resolve with the freed rectangles added to the region by pretending the neighbours own that space.
-      const withFreed = keep.map((c) => c);
-      void regionRects;
-      const resolved = resolveRegion(design, withFreed, floor, group.map((c) => c.id), [], [], !!request.hot, freed.map((c) => c.rect));
+      // Try the first two neighbours, then every single neighbour, then every pair, so the space goes to whichever rooms can use it.
+      const groups: Cell[][] = [nearby.slice(0, 2), ...nearby.map((n) => [n])];
+      for (let i = 0; i < nearby.length; i++) for (let j = i + 1; j < nearby.length; j++) groups.push([nearby[i], nearby[j]]);
+      let group: Cell[] = groups[0];
+      let resolved: Cell[] | null = null;
+      for (const g of groups) {
+        resolved = resolveRegion(design, keep, floor, g.map((c) => c.id), [], [], !!request.hot, freed.map((c) => c.rect), {}, 1.5);
+        if (resolved) { group = g; break; }
+      }
       if (!resolved) return { ok: false, reason: `The space left by ${gone.name} cannot be shared out among the neighbouring rooms in a usable way.` };
       cells = resolved;
       strategy = 'local-resolve';
