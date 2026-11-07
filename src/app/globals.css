@@ -33,8 +33,7 @@
   --ivory: #F4F1EA;
   --ink: #1B1B1F;
   --plum: #4A1030;
-  /* Warm blush for the alternate sections: it belongs with the plum, gold and blossom palette (a cold blue read as washed out). */
-  --sky: #F6E4EA;
+  --sky: #B9D3E6;
   --blossom: #E0218A;
   --blossom-soft: #F6B8D6;
   --gold: #C9A227;
@@ -424,7 +423,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 .footer-top { border-color: rgba(232, 207, 122, .55); }
 
 .statement { isolation: isolate; }
-.statement::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: min(78vw, 980px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(246, 184, 214, .45), rgba(246, 210, 224, .25) 60%, rgba(246, 228, 234, 0)); transform: translate(-50%, -50%); pointer-events: none; }
+.statement::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: min(78vw, 980px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(185, 211, 230, .8), rgba(185, 211, 230, .35) 60%, rgba(185, 211, 230, 0)); transform: translate(-50%, -50%); pointer-events: none; }
 .gallery-card-media { background: var(--sky); }
 .gallery-card-media--plan { background: var(--sky); border-color: rgba(27, 27, 31, .1); }
 .mode-media, .style-card-media { background: var(--sky); }
@@ -434,7 +433,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 .cursor[data-state='label'] .cursor-disc { background: var(--sky); }
 .cursor-label { color: var(--ink); }
 .page-hero { isolation: isolate; }
-.page-hero::before { content: ''; position: absolute; right: -12vw; top: -14vw; z-index: -1; width: 62vw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(246, 184, 214, .4), rgba(246, 228, 234, 0)); pointer-events: none; }
+.page-hero::before { content: ''; position: absolute; right: -12vw; top: -14vw; z-index: -1; width: 62vw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(185, 211, 230, .75), rgba(185, 211, 230, 0)); pointer-events: none; }
 .row-aside { align-self: start; padding: 28px 30px; background: color-mix(in srgb, var(--sky) 55%, transparent); }
 .page-callout .label--rule, .page-callout .label { color: var(--ink); }
 
@@ -518,3 +517,63 @@ img, svg { max-width: 100%; }
 @media (max-width: 599px) {
   .callout-title { font-size: clamp(1.4rem, 7vw, 2.4rem); }
 }
+
+/* ---------- Poster tri-gradient accents ----------
+   The sky-blue → blush → sage wash from the ArchAdapt poster (behind its pipeline diagram), used as a splash on
+   a few key elements. --tri-soft is the poster's own pastel wash; --tri-vivid is the same three hues deepened so
+   they still read as thin lines and small marks. */
+:root {
+  --tri-soft: linear-gradient(90deg, #E4EEF7 0%, #FBE9F0 50%, #E6F1DE 100%);
+  --tri-vivid: linear-gradient(90deg, #8DBBE2 0%, #EE9BBF 50%, #97C77F 100%);
+  --tri-vivid-v: linear-gradient(180deg, #8DBBE2 0%, #EE9BBF 50%, #97C77F 100%);
+}
+
+/* The Idea statement sits on the poster wash, with the existing blue glow on top. */
+.statement { background: var(--tri-soft); }
+
+/* Progress and scroll cues draw in the three colours. */
+.rail-line i { background: var(--tri-vivid-v); }
+.gallery-progress i { background: var(--tri-vivid); height: 3px; top: -1px; border-radius: 3px; }
+.hero-scroll-line { background: var(--tri-vivid-v); width: 2px; }
+
+/* Section labels: the short rule before "How it works", "Design modes"… becomes a tri-colour stroke. */
+.label--rule::before, .label--center::after { background: var(--tri-vivid); height: 2px; border-radius: 2px; }
+
+/* Process: the photo gets a tri-colour frame, and each step's hairline picks up the wash. */
+.process-media { box-shadow: 0 0 0 6px #fff, 0 0 0 9px transparent, 0 30px 60px -30px rgba(74, 16, 48, .35); }
+.process-media::after { content: ''; position: absolute; inset: 0; pointer-events: none; border: 4px solid transparent; border-image: var(--tri-vivid) 1; z-index: 2; }
+.process-step .hairline { background: var(--tri-vivid); height: 2px; }
+
+/* Modes: a card lights up with the poster wash on hover, and its rule turns tri-colour. */
+.mode-card { position: relative; isolation: isolate; }
+.mode-card::before { content: ''; position: absolute; inset: 0 calc(var(--gutter) * -0.5); z-index: -1; background: var(--tri-soft); opacity: 0; transition: opacity .45s var(--ease-out); }
+.mode-card::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--tri-vivid); transform: scaleX(0); transform-origin: left; transition: transform .6s var(--ease-out); }
+.mode-card:hover::before, .mode-card:focus-visible::before { opacity: .9; }
+.mode-card:hover::after, .mode-card:focus-visible::after { transform: scaleX(1); }
+
+/* Compare: the ArchAdapt column is marked with a tri-colour bar and a faint wash. */
+.compare-row .compare-us { border-left: 0; position: relative; }
+.compare-row .compare-us::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px; background: var(--tri-vivid-v); }
+.compare-row--head .compare-us::after { display: none; }
+.compare-row:not(.compare-row--head) .compare-us { background: linear-gradient(90deg, rgba(228, 238, 247, .7), rgba(251, 233, 240, .5) 50%, rgba(230, 241, 222, 0)); padding-top: .4rem; padding-bottom: .4rem; }
+
+/* Numbers (on plum): each column's top rule glows in the three colours. */
+.numbers-list li { border-top-color: transparent !important; position: relative; }
+.numbers-list li::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: var(--tri-vivid); opacity: .9; }
+
+@media (max-width: 899px) {
+  .compare-row .compare-us::after { display: none; }
+  .mode-card::before { inset: 0 -8px; }
+}
+
+/* Hero: "your life" is lit in the poster's three colours (brightened to read on the night photo). */
+.hero-script {
+  background: linear-gradient(95deg, #CFE5F8 8%, #FFC2DB 50%, #D3EEBF 92%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  text-shadow: none; filter: drop-shadow(0 2px 14px rgba(10, 12, 16, .55));
+}
+.hero-script-line { background: var(--tri-vivid); height: 2px; }
+
+/* Stronger marks where the accent must pop. */
+.numbers-list li::before { height: 3px; opacity: 1; box-shadow: 0 0 18px rgba(238, 155, 191, .35); }
+.compare-row:not(.compare-row--head) .compare-us { background: linear-gradient(90deg, rgba(196, 222, 243, .75), rgba(248, 210, 226, .6) 55%, rgba(214, 235, 200, .35)); }
