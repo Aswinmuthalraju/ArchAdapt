@@ -6,8 +6,8 @@ const all = (root: Element, selector: string) => Array.from(root.querySelectorAl
 
 /**
  * Wires the shared scroll reveals inside `root` from data attributes:
- * - `data-stretch`: glyphs start tall and blurred, then settle (scrubbed on desktop)
- * - `data-words`: words climb from 15% to full opacity with the scroll
+ * - `data-stretch`: glyphs start tall and soft, then settle once as the heading enters
+ * - `data-words`: words climb from 35% to full opacity with the scroll
  * - `data-fade`: rise and fade in
  * - `data-curtain` / `data-curtain-img`: clip-path wipe with the image scaling down inside
  * - `data-blossom`: slides in from its edge, then drifts at its own `data-speed`
@@ -30,10 +30,12 @@ export function motionReveals(root: Element) {
     all(root, '[data-stretch]').forEach((el) => {
       const chars = el.querySelectorAll('.split-char');
       if (desktop) {
+        // Played once as the heading enters, then it stays crisp. (Scrubbing tied the blur to scroll position, so a
+        // heading read in the lower half of the screen stayed stretched and smeared.)
         gsap.fromTo(chars,
-          { scaleY: 2.8, yPercent: -12, opacity: 0, filter: 'blur(10px)' },
-          { scaleY: 1, yPercent: 0, opacity: 1, filter: 'blur(0px)', ease: 'none', stagger: { each: 0.06, from: 'start' },
-            scrollTrigger: { trigger: el, start: 'top 92%', end: 'top 48%', scrub: 0.8 } });
+          { scaleY: 2.2, yPercent: -10, opacity: 0, filter: 'blur(6px)' },
+          { scaleY: 1, yPercent: 0, opacity: 1, filter: 'blur(0px)', duration: 1.1, ease: 'expo.out', stagger: { each: 0.035, from: 'start' },
+            clearProps: 'filter', scrollTrigger: { trigger: el, start: 'top 88%', once: true } });
       } else {
         gsap.fromTo(chars,
           { scaleY: 1.9, opacity: 0 },
@@ -43,9 +45,9 @@ export function motionReveals(root: Element) {
 
     all(root, '[data-words]').forEach((el) => {
       const words = el.querySelectorAll('.split-word');
-      gsap.fromTo(words, { opacity: 0.15 }, {
+      gsap.fromTo(words, { opacity: 0.35 }, {
         opacity: 1, ease: 'none', stagger: 0.1,
-        scrollTrigger: { trigger: el, start: desktop ? 'top 75%' : 'top 85%', end: desktop ? 'bottom 55%' : 'bottom 70%', scrub: desktop ? 0.6 : true },
+        scrollTrigger: { trigger: el, start: desktop ? 'top 75%' : 'top 85%', end: desktop ? 'bottom 70%' : 'bottom 80%', scrub: desktop ? 0.6 : true },
       });
     });
 

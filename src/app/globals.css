@@ -33,7 +33,8 @@
   --ivory: #F4F1EA;
   --ink: #1B1B1F;
   --plum: #4A1030;
-  --sky: #B9D3E6;
+  /* Warm blush for the alternate sections: it belongs with the plum, gold and blossom palette (a cold blue read as washed out). */
+  --sky: #F6E4EA;
   --blossom: #E0218A;
   --blossom-soft: #F6B8D6;
   --gold: #C9A227;
@@ -423,7 +424,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 .footer-top { border-color: rgba(232, 207, 122, .55); }
 
 .statement { isolation: isolate; }
-.statement::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: min(78vw, 980px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(185, 211, 230, .8), rgba(185, 211, 230, .35) 60%, rgba(185, 211, 230, 0)); transform: translate(-50%, -50%); pointer-events: none; }
+.statement::before { content: ''; position: absolute; left: 50%; top: 50%; z-index: -1; width: min(78vw, 980px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(246, 184, 214, .45), rgba(246, 210, 224, .25) 60%, rgba(246, 228, 234, 0)); transform: translate(-50%, -50%); pointer-events: none; }
 .gallery-card-media { background: var(--sky); }
 .gallery-card-media--plan { background: var(--sky); border-color: rgba(27, 27, 31, .1); }
 .mode-media, .style-card-media { background: var(--sky); }
@@ -433,7 +434,7 @@ a.gallery-card:hover .gallery-card-media, a.gallery-card:focus-visible .gallery-
 .cursor[data-state='label'] .cursor-disc { background: var(--sky); }
 .cursor-label { color: var(--ink); }
 .page-hero { isolation: isolate; }
-.page-hero::before { content: ''; position: absolute; right: -12vw; top: -14vw; z-index: -1; width: 62vw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(185, 211, 230, .75), rgba(185, 211, 230, 0)); pointer-events: none; }
+.page-hero::before { content: ''; position: absolute; right: -12vw; top: -14vw; z-index: -1; width: 62vw; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgba(246, 184, 214, .4), rgba(246, 228, 234, 0)); pointer-events: none; }
 .row-aside { align-self: start; padding: 28px 30px; background: color-mix(in srgb, var(--sky) 55%, transparent); }
 .page-callout .label--rule, .page-callout .label { color: var(--ink); }
 
