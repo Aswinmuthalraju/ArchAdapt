@@ -49,7 +49,7 @@ const BlueprintIngestionModal = dynamic(() => import('@/components/studio/Bluepr
 
 import ArchitecturalHUD from '@/components/workspace/ArchitecturalHUD';
 import { analyseDesign, DEFAULT_LIMITS, PlanLimits } from '@/lib/pro/analysis';
-import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare, Building, Upload } from 'lucide-react';
+import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare, Building, Upload, Eye } from 'lucide-react';
 import { Project, FloorPlanVersion, StructuredDesignJSON, WhatIfMessage, FloorPlanRoom } from '@/types/architectural';
 import { supabase, authHeaders } from '@/lib/supabase/client';
 import { useAuthGuard } from '@/lib/auth/AuthProvider';
@@ -518,19 +518,19 @@ export default function WorkspacePage() {
           <button
             onClick={() => openInteriorStudio()}
             className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors"
-            title="Generate Photorealistic 4K Interior Renders"
+            title="Interactive 3D Room Walk-In (Eye-level 360° tour with PBR materials)"
           >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>AI Interiors</span>
+            <Eye className="h-3.5 w-3.5" />
+            <span>3D Walk-In</span>
           </button>
           <span className="text-stone-700">|</span>
           <button
             onClick={() => setIsExteriorStudioOpen(true)}
             className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium text-stone-300 hover:text-amber-300 hover:bg-stone-800 transition-colors"
-            title="Generate 3D Building Facade Renders"
+            title="Technical 2D Elevations & Interactive 3D Facade Studio"
           >
             <Building className="h-3.5 w-3.5" />
-            <span>Facades</span>
+            <span>Elevations & 3D</span>
           </button>
           <span className="text-stone-700">|</span>
           <button
@@ -704,11 +704,11 @@ export default function WorkspacePage() {
                 <button
                   type="button"
                   onClick={() => openInteriorStudio(selectedRoomObj)}
-                  className="flex items-center gap-1 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 px-3 py-1 text-white font-semibold shadow transition-all"
-                  title="Generate Photorealistic 4K Interior Render"
+                  className="flex items-center gap-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 px-3 py-1 text-white font-semibold shadow transition-all"
+                  title="Open 3D Room Walk-In (Eye-level 360° interactive view with PBR materials)"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>AI Interior Render</span>
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>3D Room Walk-In</span>
                 </button>
                 <button
                   type="button"

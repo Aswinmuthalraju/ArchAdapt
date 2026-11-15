@@ -675,10 +675,10 @@ export default function Massing3DViewer({
                 if (targetRoom) onOpenInteriorStudio(targetRoom);
               }}
               className="flex h-9 items-center gap-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 px-3 text-xs font-semibold text-white shadow hover:from-amber-500 hover:to-amber-400 transition-all"
-              title="Open Photorealistic Interior Studio"
+              title="Open 3D Room Walk-In Studio"
             >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Interior Studio</span>
+              <Eye className="h-3.5 w-3.5" />
+              <span>3D Walk-In</span>
             </button>
           )}
 
@@ -686,10 +686,10 @@ export default function Massing3DViewer({
             <button
               onClick={onOpenExteriorStudio}
               className="flex h-9 items-center gap-1.5 rounded border border-plum-600 bg-plum-800 px-3 text-xs font-medium text-stone-200 hover:border-gold-400 hover:text-gold-200 transition-colors"
-              title="Open 3D Facade Studio"
+              title="Open Technical Elevations & 3D Facade Studio"
             >
               <Building className="h-3.5 w-3.5" />
-              <span>Facade Studio</span>
+              <span>Elevations & 3D</span>
             </button>
           )}
 
@@ -864,8 +864,8 @@ export default function Massing3DViewer({
                 }}
                 className="mt-1 flex w-full items-center justify-center gap-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 py-2 font-semibold text-white text-xs shadow transition-all"
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>AI Interior Render (4K)</span>
+                <Eye className="h-3.5 w-3.5" />
+                <span>Open 3D Room Walk-In</span>
               </button>
             )}
 
