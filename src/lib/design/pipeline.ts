@@ -4,6 +4,7 @@ import {
   DesignProgram,
   DesignRequirements,
   LocationInfo,
+  RoomType,
   SiteInfo,
   StructuredDesignJSON
 } from '@/types/architectural';
@@ -15,6 +16,8 @@ import { getRelevantKnowledge } from '@/lib/genai/rag/architecturalKnowledge';
 import { PlanLayoutOptions, RankedPlan, planLayout } from './planner';
 import { buildConstraints, parseProgram, programFromDesign, validateProgramRequirements } from './program';
 import { validateFloorPlan } from './validateFloorPlan';
+import { computeMetrics } from './metrics';
+import { inferRoomType } from './roomTypes';
 import { StyleLevel, applyStyleMandates, checkStyleConformance, describeStyleAdditions, styleBlueprint } from './styleBlueprints';
 
 export const MAX_GENERATION_ATTEMPTS = 2;
@@ -102,48 +105,26 @@ export function buildPlanExplanation(
   site: SiteInfo,
   report?: { isValid: boolean; errors: string[]; warnings: string[] }
 ) {
-  const plotArea = site.plotWidth * site.plotDepth;
-  const coverageArea = Math.round(design.footprint?.footprintAreaSqFt || 0);
-  const coveragePct = Math.round((coverageArea / (plotArea || 1)) * 100);
+  const m = computeMetrics(design);
+  const floors = design.floorsCount || 1;
+  const sized = (type: RoomType) => {
+    const room = design.rooms.find((r) => inferRoomType(r) === type);
+    return room ? `${room.name}: ${room.dimensions} (${Math.round(room.areaSqFt)} sq ft)` : null;
+  };
 
-  const gRooms = design.rooms.filter((r) => r.position.floorLevel === 0);
-  const frontRooms = gRooms.filter((r) => r.zoningCategory === 'public' || r.roomType === 'entrance' || r.roomType === 'living').map((r) => r.name);
-  const middleRooms = gRooms.filter((r) => r.zoningCategory === 'service' || r.zoningCategory === 'circulation' || r.roomType === 'stair' || r.roomType === 'dining' || r.roomType === 'kitchen').map((r) => r.name);
-  const rearRooms = gRooms.filter((r) => r.zoningCategory === 'private' || r.roomType === 'bedroom' || r.roomType === 'master_bedroom').map((r) => r.name);
-
+  // Facts only: every line is a number taken from the geometry, nothing is asserted that was not measured.
   const zoneRationale = [
-    `Front Zone: Houses public arrival spaces (${frontRooms.join(', ') || 'Entrance & Living Room'}) facing the ${site.orientation} road frontage for direct approach, visitor reception, and street-facing daylight.`,
-    `Middle Zone: Houses central vertical circulation (staircase well) and service cores (${middleRooms.join(', ') || 'Stair, Dining & Kitchen'}) buffering formal reception from private family quarters.`,
-    `Rear Zone: Provides an acoustic and visual sanctuary for restful spaces (${rearRooms.join(', ') || 'Private Bedrooms'}), sheltered from street noise and opening to the rear garden setback.`,
-    ...(design.floorsCount > 1 ? [
-      `Upper Floor(s): Private bedroom suites and family lounge arranged to maintain structural stacking over ground-floor load-bearing walls, with stepped setbacks creating purposeful terrace zones.`
-    ] : [])
+    `Plot ${site.plotWidth} x ${site.plotDepth} ft (${m.plotAreaSqFt} sq ft); ground footprint ${m.footprintSqFt} sq ft, ${m.coveragePct}% coverage; ${floors} floor${floors === 1 ? '' : 's'}.`,
+    `Built-up area ${m.builtUpSqFt} sq ft, carpet area ${m.carpetSqFt} sq ft (${m.carpetPct}% of built-up), FSI ${m.fsi}.`
   ];
+  const sizingRationale = (['living', 'master_bedroom', 'kitchen'] as RoomType[]).map(sized).filter((line): line is string => !!line);
 
-  const livingRoom = design.rooms.find((r) => r.roomType === 'living');
-  const masterBed = design.rooms.find((r) => r.roomType === 'master_bedroom');
-
-  const sizingRationale = [
-    `Plot Area & Ground Coverage: Plot dimensions ${site.plotWidth} ft x ${site.plotDepth} ft (${plotArea} sq ft) yield a ground footprint of ${coverageArea} sq ft (${coveragePct}% ground coverage), within standard residential coverage guidelines.`,
-    `Proportional Sizing: Major habitable room dimensions conform to NBC living standards (${livingRoom ? `living room ${Math.round(livingRoom.areaSqFt)} sq ft` : 'living room'}, ${masterBed ? `master bedroom ${Math.round(masterBed.areaSqFt)} sq ft` : 'master bedroom'}).`,
-    `Aspect Ratio Optimization: All habitable rooms observe strict aspect ratio capping (<= 1.8:1) to ensure rectangular daylight penetration and functional furniture layouts without elongated proportions.`,
-    ...(plotArea >= 5000 ? [
-      `Large Plot Sizing: Ground coverage is capped to preserve expansive private garden zones, vehicle turning radii, and landscaped setback buffers.`
-    ] : [])
-  ];
-
+  const failed = m.checks.filter((c) => c.status === 'fail');
   const validationReport = {
-    isValid: report?.isValid ?? true,
-    errors: report?.errors ?? [],
+    isValid: (report?.isValid ?? true) && failed.length === 0,
+    errors: [...(report?.errors ?? []), ...failed.filter((c) => c.id !== 'validator').map((c) => `${c.label}: ${c.detail}`)],
     warnings: report?.warnings ?? [],
-    checksPassed: [
-      'ROAD_FACING_MAIN_DOOR: Main entry door is properly oriented towards road frontage.',
-      'STAIR_CONNECTS_EVERY_FLOOR: Vertical circulation links all floor levels with direct landing clearance.',
-      'CIRCULATION_ACCESSIBILITY: All rooms reachable through public corridors without crossing private bedrooms or bathrooms.',
-      'ASPECT_RATIO_BOUNDS: Major habitable rooms conform to maximum aspect ratio <= 1.8.',
-      'SETBACK_COMPLIANCE: Building footprint sits strictly within statutory setback boundaries.',
-      'STRUCTURAL_STACKING: Upper floor rooms stack along load-bearing wall alignments.'
-    ]
+    checksPassed: m.checks.filter((c) => c.status === 'pass').map((c) => `${c.label}: ${c.detail}`)
   };
 
   return { zoneRationale, sizingRationale, validationReport };

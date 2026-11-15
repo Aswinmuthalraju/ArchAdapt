@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Environment, Lightformer, ContactShadows, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -9,14 +9,18 @@ import { StructuredDesignJSON, HouseAppearance } from '@/types/architectural';
 import { buildHouseGeometry, Box3D, HouseGeometry3D, RoomMesh3D } from '@/lib/geometry/buildHouseGeometry';
 import { getHouseMaterials, HouseMaterialSystem } from '@/lib/geometry/materials';
 import { floorName } from '@/lib/design/roomTypes';
+import { registerViewportCapture } from '@/lib/rendering/viewportCapture';
 import AppearancePanel from '@/components/workspace/AppearancePanel';
-import { Palette, Home, LocateFixed, Eye, Scissors, Layers, Compass, Check, X } from 'lucide-react';
+import { Palette, Home, LocateFixed, Eye, Scissors, Layers, Compass, Check, X, Sparkles, Building } from 'lucide-react';
+import { FloorPlanRoom } from '@/types/architectural';
 
 export interface Massing3DViewerProps {
   design: StructuredDesignJSON;
   onAppearanceChange?: (updatedAppearance: HouseAppearance) => void;
   selectedRoomId?: string;
   onRoomSelect?: (roomId: string | null) => void;
+  onOpenInteriorStudio?: (room: FloorPlanRoom) => void;
+  onOpenExteriorStudio?: () => void;
 }
 
 type LightingMode = 'day' | 'evening' | 'night';
@@ -201,6 +205,112 @@ function RoofMesh({ roof, materials, clipPlane }: { roof: HouseGeometry3D['roofs
   );
 }
 
+function RoomFurnishings3D({
+  room,
+  planes
+}: {
+  room: RoomMesh3D;
+  planes: THREE.Plane[];
+}) {
+  const [w, h, d] = room.size;
+  const yBase = h / 2;
+
+  if (room.roomType === 'master_bedroom' || room.roomType === 'bedroom' || room.roomType === 'guest_room') {
+    const bedW = Math.min(1.8, w * 0.55);
+    const bedL = Math.min(2.1, d * 0.65);
+    return (
+      <group position={[0, yBase, 0]}>
+        <mesh position={[0, 0.25, 0]} castShadow receiveShadow>
+          <boxGeometry args={[bedW, 0.35, bedL]} />
+          <meshStandardMaterial color="#EAE6DF" roughness={0.9} clippingPlanes={planes} clipShadows />
+        </mesh>
+        <mesh position={[0, 0.55, -bedL / 2 + 0.06]} castShadow>
+          <boxGeometry args={[bedW + 0.15, 0.75, 0.12]} />
+          <meshStandardMaterial color="#3E2E20" roughness={0.6} clippingPlanes={planes} clipShadows />
+        </mesh>
+        {w >= 3.0 && (
+          <>
+            <mesh position={[-bedW / 2 - 0.3, 0.2, -bedL / 2 + 0.25]} castShadow>
+              <boxGeometry args={[0.45, 0.4, 0.4]} />
+              <meshStandardMaterial color="#5C4838" roughness={0.7} clippingPlanes={planes} clipShadows />
+            </mesh>
+            <mesh position={[bedW / 2 + 0.3, 0.2, -bedL / 2 + 0.25]} castShadow>
+              <boxGeometry args={[0.45, 0.4, 0.4]} />
+              <meshStandardMaterial color="#5C4838" roughness={0.7} clippingPlanes={planes} clipShadows />
+            </mesh>
+          </>
+        )}
+      </group>
+    );
+  }
+
+  if (room.roomType === 'living' || room.roomType === 'lounge') {
+    const sofaW = Math.min(2.3, w * 0.65);
+    const sofaD = Math.min(0.85, d * 0.35);
+    return (
+      <group position={[0, yBase, 0]}>
+        <mesh position={[0, 0.22, -sofaD / 2]} castShadow receiveShadow>
+          <boxGeometry args={[sofaW, 0.44, sofaD]} />
+          <meshStandardMaterial color="#4A4540" roughness={0.85} clippingPlanes={planes} clipShadows />
+        </mesh>
+        <mesh position={[0, 0.48, -sofaD + 0.08]} castShadow>
+          <boxGeometry args={[sofaW, 0.5, 0.16]} />
+          <meshStandardMaterial color="#383430" roughness={0.8} clippingPlanes={planes} clipShadows />
+        </mesh>
+        <mesh position={[0, 0.16, 0.35]} castShadow receiveShadow>
+          <boxGeometry args={[sofaW * 0.55, 0.28, 0.5]} />
+          <meshStandardMaterial color="#8C7355" roughness={0.5} metalness={0.1} clippingPlanes={planes} clipShadows />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (room.roomType === 'dining') {
+    const tableW = Math.min(1.7, w * 0.5);
+    const tableD = Math.min(0.95, d * 0.5);
+    return (
+      <group position={[0, yBase, 0]}>
+        <mesh position={[0, 0.72, 0]} castShadow receiveShadow>
+          <boxGeometry args={[tableW, 0.06, tableD]} />
+          <meshStandardMaterial color="#6B533E" roughness={0.4} clippingPlanes={planes} clipShadows />
+        </mesh>
+        <mesh position={[0, 0.36, 0]} castShadow>
+          <boxGeometry args={[tableW * 0.6, 0.68, tableD * 0.6]} />
+          <meshStandardMaterial color="#22201E" roughness={0.5} metalness={0.6} clippingPlanes={planes} clipShadows />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (room.roomType === 'kitchen') {
+    return (
+      <group position={[0, yBase, 0]}>
+        <mesh position={[0, 0.44, 0]} castShadow receiveShadow>
+          <boxGeometry args={[Math.min(1.9, w * 0.6), 0.88, Math.min(0.75, d * 0.4)]} />
+          <meshStandardMaterial color="#E8ECEF" roughness={0.2} metalness={0.1} clippingPlanes={planes} clipShadows />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (room.roomType === 'bathroom') {
+    return (
+      <group position={[0, yBase, 0]}>
+        <mesh position={[-w * 0.25, 0.42, 0]} castShadow>
+          <boxGeometry args={[Math.min(0.9, w * 0.4), 0.84, Math.min(0.55, d * 0.5)]} />
+          <meshStandardMaterial color="#2B303A" roughness={0.4} metalness={0.2} clippingPlanes={planes} clipShadows />
+        </mesh>
+        <mesh position={[w * 0.25, 0.95, 0]}>
+          <boxGeometry args={[0.05, 1.9, Math.min(1.0, d * 0.7)]} />
+          <meshPhysicalMaterial color="#CFE0E6" transparent opacity={0.35} roughness={0.05} metalness={0.1} transmission={0.9} clippingPlanes={planes} clipShadows />
+        </mesh>
+      </group>
+    );
+  }
+
+  return null;
+}
+
 function BuildingModel({
   geometry,
   materials,
@@ -329,6 +439,9 @@ function BuildingModel({
         const isHovered = room.id === hoveredRoomId;
         return (
           <group key={`room-interact-${room.id}`} position={room.position}>
+            {/* 3D Staged Furnishings */}
+            <RoomFurnishings3D room={room} planes={planes} />
+
             {/* Raycast Target Box */}
             <mesh
               onPointerOver={(e) => {
@@ -400,7 +513,27 @@ function BuildingModel({
 const toolbarButton = (active: boolean) =>
   `flex h-9 items-center gap-1.5 border px-3 text-sm transition-colors ${active ? 'border-gold-400 bg-gold-400/15 font-medium text-gold-200' : 'border-plum-600 bg-plum-800 text-stone-300 hover:border-gold-500 hover:text-gold-200'}`;
 
-export default function Massing3DViewer({ design, onAppearanceChange, selectedRoomId, onRoomSelect }: Massing3DViewerProps) {
+/** Exposes a one-shot capture of this canvas (rendered then read in the same tick, so no preserveDrawingBuffer needed). */
+function CaptureBridge() {
+  const { gl, scene, camera } = useThree();
+  useEffect(() => {
+    registerViewportCapture(() => {
+      gl.render(scene, camera);
+      return gl.domElement.toDataURL('image/jpeg', 0.85);
+    });
+    return () => registerViewportCapture(null);
+  }, [gl, scene, camera]);
+  return null;
+}
+
+export default function Massing3DViewer({ 
+  design, 
+  onAppearanceChange, 
+  selectedRoomId, 
+  onRoomSelect,
+  onOpenInteriorStudio,
+  onOpenExteriorStudio
+}: Massing3DViewerProps) {
   const [lightingMode, setLightingMode] = useState<LightingMode>('day');
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [showRoof, setShowRoof] = useState(true);
@@ -534,6 +667,32 @@ export default function Massing3DViewer({ design, onAppearanceChange, selectedRo
             Appearance
           </button>
 
+          {/* Generative AEC Studio Actions */}
+          {onOpenInteriorStudio && (
+            <button
+              onClick={() => {
+                const targetRoom = (selectedRoom ? design.rooms.find((r) => r.id === selectedRoom.id) : null) || design.rooms[0];
+                if (targetRoom) onOpenInteriorStudio(targetRoom);
+              }}
+              className="flex h-9 items-center gap-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 px-3 text-xs font-semibold text-white shadow hover:from-amber-500 hover:to-amber-400 transition-all"
+              title="Open Photorealistic Interior Studio"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Interior Studio</span>
+            </button>
+          )}
+
+          {onOpenExteriorStudio && (
+            <button
+              onClick={onOpenExteriorStudio}
+              className="flex h-9 items-center gap-1.5 rounded border border-plum-600 bg-plum-800 px-3 text-xs font-medium text-stone-200 hover:border-gold-400 hover:text-gold-200 transition-colors"
+              title="Open 3D Facade Studio"
+            >
+              <Building className="h-3.5 w-3.5" />
+              <span>Facade Studio</span>
+            </button>
+          )}
+
           {/* Lighting Mode */}
           <div role="group" aria-label="Lighting" className="flex border border-plum-600 bg-plum-800 p-0.5">
             {(['day', 'evening', 'night'] as const).map((mode) => (
@@ -598,6 +757,7 @@ export default function Massing3DViewer({ design, onAppearanceChange, selectedRo
             localClippingEnabled: true
           }}
         >
+          <CaptureBridge />
           <color attach="background" args={[scene.background]} />
           <fog attach="fog" args={[scene.background, distance * 1.8, distance * 5]} />
           <PerspectiveCamera makeDefault position={currentCam.pos} fov={currentCam.fov} near={0.5} far={distance * 12} />
@@ -694,6 +854,20 @@ export default function Massing3DViewer({ design, onAppearanceChange, selectedRo
                 <span className="text-[10px] text-stone-400 block">{(selectedRoom.widthFt * selectedRoom.depthFt * 0.0929).toFixed(1)} m²</span>
               </div>
             </div>
+
+            {onOpenInteriorStudio && (
+              <button
+                type="button"
+                onClick={() => {
+                  const rawRoom = design.rooms.find((r) => r.id === selectedRoom.id);
+                  if (rawRoom) onOpenInteriorStudio(rawRoom);
+                }}
+                className="mt-1 flex w-full items-center justify-center gap-1.5 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 py-2 font-semibold text-white text-xs shadow transition-all"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>AI Interior Render (4K)</span>
+              </button>
+            )}
 
             <div className="flex items-center justify-between border-t border-plum-700/80 pt-2 text-[11px] text-stone-400">
               <span>Synchronized with 2D floor plan</span>

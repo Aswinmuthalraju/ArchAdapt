@@ -9,7 +9,6 @@ import Blossom from '@/components/motion/Blossom';
 import CircleButton from '@/components/motion/CircleButton';
 import SplitText from '@/components/motion/SplitText';
 import { gsap, MQ, useGSAP } from '@/lib/motion';
-import Petals from './Petals';
 import StylePhoto from '@/components/styles/StylePhoto';
 import { STYLE_CATALOG } from '@/lib/styles/styleCatalog';
 import Preloader, { introReady } from './Preloader';
@@ -110,7 +109,6 @@ export default function Home({ plan }: { plan: ReactNode }) {
             </div>
           </div>
           <div className="hero-shade" aria-hidden="true" />
-          <Petals />
           <p className="hero-kicker label" data-hero-fade>AI planning for architects · Plot to drawing set</p>
           <div className="hero-title-wrap">
             <h1 id="hero-title" className="hero-title">

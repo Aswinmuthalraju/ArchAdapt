@@ -34,9 +34,23 @@ const ExportMenu = dynamic(() => import('@/components/workspace/ExportMenu'), {
   ssr: false
 });
 
+const InteriorStudioModal = dynamic(() => import('@/components/studio/InteriorStudioModal'), {
+  ssr: false
+});
+
+const ExteriorStudioModal = dynamic(() => import('@/components/studio/ExteriorStudioModal'), {
+  ssr: false
+});
+
+
+const BlueprintIngestionModal = dynamic(() => import('@/components/studio/BlueprintIngestionModal'), {
+  ssr: false
+});
+
+import ArchitecturalHUD from '@/components/workspace/ArchitecturalHUD';
 import { analyseDesign, DEFAULT_LIMITS, PlanLimits } from '@/lib/pro/analysis';
-import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare } from 'lucide-react';
-import { Project, FloorPlanVersion, StructuredDesignJSON, WhatIfMessage } from '@/types/architectural';
+import { Layers, Box, Send, Sparkles, ArrowLeft, History, GitCompare, CheckCircle, AlertTriangle, ClipboardList, MessageSquare, Building, Upload } from 'lucide-react';
+import { Project, FloorPlanVersion, StructuredDesignJSON, WhatIfMessage, FloorPlanRoom } from '@/types/architectural';
 import { supabase, authHeaders } from '@/lib/supabase/client';
 import { useAuthGuard } from '@/lib/auth/AuthProvider';
 import { getUserProjectsFromSupabase, setCurrentVersionInSupabase } from '@/lib/services/projectService';
@@ -78,6 +92,15 @@ export default function WorkspacePage() {
   const [elapsed, setElapsed] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_LIMITS);
+  const [isInteriorStudioOpen, setIsInteriorStudioOpen] = useState(false);
+  const [interiorStudioRoom, setInteriorStudioRoom] = useState<FloorPlanRoom | null>(null);
+  const [isExteriorStudioOpen, setIsExteriorStudioOpen] = useState(false);
+  const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
+
+  const openInteriorStudio = (room?: FloorPlanRoom | null) => {
+    setInteriorStudioRoom(room || (currentVersion?.structuredDesign?.rooms[0] || null));
+    setIsInteriorStudioOpen(true);
+  };
 
   useEffect(() => {
     try {
@@ -490,6 +513,36 @@ export default function WorkspacePage() {
           ))}
         </div>
 
+        {/* Generative AEC Studio Quick Launch */}
+        <div className="hidden lg:flex items-center gap-1.5 border border-amber-500/30 bg-stone-900/80 px-2 py-1 rounded-lg">
+          <button
+            onClick={() => openInteriorStudio()}
+            className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors"
+            title="Generate Photorealistic 4K Interior Renders"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>AI Interiors</span>
+          </button>
+          <span className="text-stone-700">|</span>
+          <button
+            onClick={() => setIsExteriorStudioOpen(true)}
+            className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium text-stone-300 hover:text-amber-300 hover:bg-stone-800 transition-colors"
+            title="Generate 3D Building Facade Renders"
+          >
+            <Building className="h-3.5 w-3.5" />
+            <span>Facades</span>
+          </button>
+          <span className="text-stone-700">|</span>
+          <button
+            onClick={() => setIsBlueprintOpen(true)}
+            className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium text-stone-300 hover:text-amber-300 hover:bg-stone-800 transition-colors"
+            title="Upload Blueprint PDF or Sketch"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            <span>Import</span>
+          </button>
+        </div>
+
         <ExportMenu
           design={activeDesign}
           analysis={analysis!}
@@ -551,57 +604,18 @@ export default function WorkspacePage() {
 
           <section className="border-b border-plum-700 p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className={`${heading}`}>Architectural Rationale</h2>
-              <span className="text-[10px] font-mono uppercase bg-plum-800 text-gold-300 px-2 py-0.5 border border-plum-600 rounded">
-                Architect Spec
+              <h2 className={`${heading}`}>AEC Specifications &amp; HUD</h2>
+              <span className="text-[10px] font-mono uppercase bg-amber-500/10 text-amber-300 px-2 py-0.5 border border-amber-500/30 rounded">
+                Authoritative Data
               </span>
             </div>
-            <p className="text-sm leading-relaxed text-stone-300">{activeDesign.rationale || currentVersion.rationale}</p>
-            {(activeDesign.modeConsiderations || []).map((item) => (
-              <p key={item.mode} className="mt-2 text-xs leading-snug text-stone-400">
-                <span className="font-semibold capitalize text-gold-300">{item.mode.replace(/_/g, ' ')}: </span>
-                {item.note}
-              </p>
-            ))}
-
-            {activeDesign.planExplanation && (
-              <details className="mt-3 group border border-plum-700 bg-plum-800/60 p-3 rounded text-xs">
-                <summary className="font-semibold text-gold-200 cursor-pointer flex items-center justify-between select-none">
-                  <span>Explain this plan (Zoning &amp; Sizing Specs)</span>
-                  <span className="text-stone-400 text-[10px] group-open:rotate-180 transition-transform">▼</span>
-                </summary>
-                <div className="mt-3 space-y-3 pt-2 border-t border-plum-700">
-                  <div>
-                    <h4 className="font-bold text-gold-300 text-[11px] uppercase tracking-wider mb-1">Spatial Zoning Rationale:</h4>
-                    <ul className="space-y-1 list-disc pl-4 text-stone-300">
-                      {activeDesign.planExplanation.zoneRationale.map((zr, i) => (
-                        <li key={i}>{zr}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gold-300 text-[11px] uppercase tracking-wider mb-1">Room Sizing &amp; Footprint:</h4>
-                    <ul className="space-y-1 list-disc pl-4 text-stone-300">
-                      {activeDesign.planExplanation.sizingRationale.map((sr, i) => (
-                        <li key={i}>{sr}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  {activeDesign.planExplanation.validationReport.checksPassed.length > 0 && (
-                    <div>
-                      <h4 className="font-bold text-emerald-400 text-[11px] uppercase tracking-wider mb-1">Validator Compliance Verification:</h4>
-                      <ul className="space-y-1 text-emerald-300 font-mono text-[10px]">
-                        {activeDesign.planExplanation.validationReport.checksPassed.map((cp, i) => (
-                          <li key={i} className="flex items-center gap-1.5">
-                            <span className="text-emerald-400">✓</span> {cp}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </details>
-            )}
+            <ArchitecturalHUD
+              design={activeDesign}
+              selectedRoomId={selectedRoomId}
+              onRoomSelect={(id) => setSelectedRoomId(id)}
+              onOpenInteriorStudio={(room) => openInteriorStudio(room)}
+              onModifyRoom={(prompt) => handleWhatIfSubmit(undefined, prompt)}
+            />
           </section>
 
           <section className="flex-1 p-5">
@@ -669,6 +683,8 @@ export default function WorkspacePage() {
               design={shownDesign}
               selectedRoomId={selectedRoomId}
               onRoomSelect={(roomId) => setSelectedRoomId(roomId && roomId !== selectedRoomId ? roomId : undefined)}
+              onOpenInteriorStudio={(room) => openInteriorStudio(room)}
+              onOpenExteriorStudio={() => setIsExteriorStudioOpen(true)}
             />
           )}
           {activeTab === 'sheet' && analysis && (
@@ -685,6 +701,15 @@ export default function WorkspacePage() {
                 <span className="text-stone-400 font-mono">({selectedRoomObj.dimensions})</span>
               </div>
               <div className="flex items-center gap-1.5 whitespace-nowrap">
+                <button
+                  type="button"
+                  onClick={() => openInteriorStudio(selectedRoomObj)}
+                  className="flex items-center gap-1 rounded bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 px-3 py-1 text-white font-semibold shadow transition-all"
+                  title="Generate Photorealistic 4K Interior Render"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>AI Interior Render</span>
+                </button>
                 <button
                   type="button"
                   disabled={isProcessing}
@@ -735,6 +760,24 @@ export default function WorkspacePage() {
         versionA={compareVersionA}
         versionB={currentVersion}
         onRestoreVersion={(ver) => activateVersion(ver)}
+      />
+
+      <InteriorStudioModal
+        isOpen={isInteriorStudioOpen}
+        onClose={() => setIsInteriorStudioOpen(false)}
+        design={shownDesign}
+        initialRoom={interiorStudioRoom}
+      />
+
+      <ExteriorStudioModal
+        isOpen={isExteriorStudioOpen}
+        onClose={() => setIsExteriorStudioOpen(false)}
+        design={shownDesign}
+      />
+
+      <BlueprintIngestionModal
+        isOpen={isBlueprintOpen}
+        onClose={() => setIsBlueprintOpen(false)}
       />
     </div>
   );
