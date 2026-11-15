@@ -30,6 +30,7 @@ export function asDesign(value: unknown): StructuredDesignJSON | null {
 /** Maps a failed media call to an honest HTTP error. */
 export function mediaFailure(r: Extract<MediaResult<unknown>, { ok: false }>) {
   if (r.kind === 'NO_KEY') return fail(503, 'AI rendering is not configured on this server (no Gemini API key).');
+  if (r.kind === 'QUOTA') return fail(503, 'The Gemini API quota is used up or image generation is not enabled for this key. Enable billing for the Google AI project (image generation is not on the free tier), or try again after the quota resets.');
   if (r.kind === 'INPUT_REJECTED') return fail(422, `The AI service rejected this request: ${r.detail}`);
   if (r.kind === 'NO_OUTPUT') return fail(502, r.detail);
   return fail(502, 'The AI service is unavailable right now. Please try again in a minute.');

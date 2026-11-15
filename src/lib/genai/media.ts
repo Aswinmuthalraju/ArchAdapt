@@ -9,27 +9,28 @@ export interface InlineMedia { mimeType: string; data: string } // data = base64
 
 export type MediaResult<T> =
   | { ok: true; value: T; modelId: string }
-  | { ok: false; kind: 'NO_KEY' | 'UNAVAILABLE' | 'INPUT_REJECTED' | 'NO_OUTPUT'; detail: string };
+  | { ok: false; kind: 'NO_KEY' | 'QUOTA' | 'UNAVAILABLE' | 'INPUT_REJECTED' | 'NO_OUTPUT'; detail: string };
 
 const csv = (value: string | undefined, fallback: string[]) => {
   const list = (value || '').split(',').map((s) => s.trim()).filter(Boolean);
   return list.length ? list : fallback;
 };
-export const imageModels = () => csv(process.env.GEMINI_IMAGE_MODELS, ['gemini-2.5-flash-image']);
-export const visionModels = () => csv(process.env.GEMINI_VISION_MODELS || process.env.GEMINI_MODELS, ['gemini-2.5-flash', 'gemini-2.5-pro']);
+export const imageModels = () => csv(process.env.GEMINI_IMAGE_MODELS, ['gemini-2.5-flash-image', 'gemini-3.1-flash-image']);
+export const visionModels = () => csv(process.env.GEMINI_VISION_MODELS, ['gemini-3.5-flash', 'gemini-3.1-flash-lite']);
 
 const CALL_TIMEOUT_MS = 55_000;
 
-async function generate(models: string[], body: unknown, deadline: number): Promise<MediaResult<any>> {
+async function generate(models: string[], body: unknown, deadline: number, callTimeoutMs = CALL_TIMEOUT_MS): Promise<MediaResult<any>> {
   const keys = geminiApiKeys();
   if (!keys.length) return { ok: false, kind: 'NO_KEY', detail: 'No Gemini API key is configured on the server (GENAI_API_KEY).' };
   const failures: string[] = [];
+  let onlyQuota = true; // every failure so far was HTTP 429
   for (const modelId of models) {
     for (let i = 0; i < keys.length; i++) {
       const remaining = deadline - Date.now();
       if (remaining < 5_000) return { ok: false, kind: 'UNAVAILABLE', detail: `Out of time. ${failures.join('; ')}` };
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), Math.min(CALL_TIMEOUT_MS, remaining));
+      const timer = setTimeout(() => controller.abort(), Math.min(callTimeoutMs, remaining));
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`, {
           method: 'POST',
@@ -41,6 +42,7 @@ async function generate(models: string[], body: unknown, deadline: number): Prom
           let message = '';
           try { message = (await res.json())?.error?.message || ''; } catch { /* not JSON */ }
           failures.push(`${modelId} key ${i + 1}: HTTP ${res.status}`);
+          if (res.status !== 429) onlyQuota = false;
           if (res.status === 400 && !/api key/i.test(message)) {
             return { ok: false, kind: 'INPUT_REJECTED', detail: message.slice(0, 200) || 'The AI service rejected the request.' };
           }
@@ -48,12 +50,14 @@ async function generate(models: string[], body: unknown, deadline: number): Prom
         }
         return { ok: true, value: await res.json(), modelId };
       } catch (err: any) {
+        onlyQuota = false;
         failures.push(`${modelId} key ${i + 1}: ${err?.name === 'AbortError' ? 'timed out' : err?.message || 'network error'}`);
       } finally {
         clearTimeout(timer);
       }
     }
   }
+  if (failures.length && onlyQuota) return { ok: false, kind: 'QUOTA', detail: failures.join('; ') };
   return { ok: false, kind: 'UNAVAILABLE', detail: failures.join('; ') || 'No model could be reached.' };
 }
 
@@ -76,7 +80,7 @@ export async function readDocumentAsJson(system: string, instruction: string, fi
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: 'user', parts: [{ text: instruction }, { inlineData: { mimeType: file.mimeType, data: file.data } }] }],
     generationConfig: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 8192 }
-  }, deadline);
+  }, deadline, 25_000); // a stuck vision model must fail over quickly
   if (!res.ok) return res;
   const text = (res.value?.candidates?.[0]?.content?.parts || []).map((p: any) => p?.text || '').join('').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   try {

@@ -46,22 +46,26 @@ export default function ExteriorStudioModal({
   const [renderResult, setRenderResult] = useState<any>(null);
 
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null); // live 3D capture shown when the AI render fails
 
   const handleGenerate = async () => {
     if (isLoading) return;
     setIsLoading(true);
     setError(null);
+    setPreview(null);
+    const reference = captureViewport();
     try {
       const res = await fetch('/api/render/exterior', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ design, style: selectedStyle, viewAngle, reference: captureViewport() })
+        body: JSON.stringify({ design, style: selectedStyle, viewAngle, reference })
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.success) throw new Error(data?.error || `Render failed (HTTP ${res.status}).`);
       setRenderResult(data);
     } catch (err: any) {
       setError(err?.message || 'Render failed.');
+      setPreview(reference);
     } finally {
       setIsLoading(false);
     }
@@ -86,6 +90,12 @@ export default function ExteriorStudioModal({
             <div className="max-w-sm p-8 text-center text-sm text-red-300" role="alert">
               <p className="font-semibold mb-1">Could not render the facade</p>
               <p className="text-red-300/80">{error}</p>
+              {preview && (
+                <div className="mt-4">
+                  <img src={preview} alt="Live 3D view of your design" className="max-h-64 w-auto mx-auto rounded border border-stone-700" />
+                  <p className="mt-1 text-[11px] text-stone-400">3D preview of your model (not an AI render)</p>
+                </div>
+              )}
             </div>
           ) : renderResult?.imageUrl ? (
             <div className="relative w-full h-full flex items-center justify-center p-3">
